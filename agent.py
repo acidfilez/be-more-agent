@@ -30,6 +30,11 @@ import warnings
 import wave
 import struct 
 
+# Timestamped log helper
+def log(msg):
+    ts = datetime.datetime.now().strftime("%H:%M:%S.%f")[:12]
+    print(f"[{ts}] {msg}", flush=True)
+
 # Suppress harmless library warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="duckduckgo_search")
 
@@ -290,8 +295,8 @@ class BotGUI:
         print("[INIT] Loading Wake Word...", flush=True)
         self.oww_model = None
         try:
-            self.oww_model = Model(wakeword_models=["hey_jarvis"], inference_framework="tflite")
-            print("[INIT] Wake Word Loaded — keyword: 'hey'", flush=True)
+            self.oww_model = Model(wakeword_models=[WAKE_WORD_MODEL], inference_framework="onnx")
+            print(f"[INIT] Wake Word Loaded — model: {WAKE_WORD_MODEL}", flush=True)
         except Exception as e:
             print(f"[CRITICAL] Failed to load wake word model: {e}")
 
@@ -645,7 +650,8 @@ class BotGUI:
                     self.set_state(BotStates.IDLE, "Resetting...")
                     continue
 
-                self.set_state(BotStates.LISTENING, "I'm listening!")
+                log(f"🎤 Wake word detected! source={trigger_source}")
+                self.set_state(BotStates.CORAZON, "Hey! 👀")
                 
                 audio_file = None
                 if trigger_source == "PTT":
@@ -654,14 +660,17 @@ class BotGUI:
                     audio_file = self.record_voice_adaptive()
                 
                 if not audio_file: 
+                    log("⏭️ No audio captured, going back to idle")
                     self.set_state(BotStates.IDLE, "Heard nothing.")
                     continue
                 
                 user_text = self.transcribe_audio(audio_file)
                 if not user_text:
+                    log("⏭️ Transcription empty, going back to idle")
                     self.set_state(BotStates.IDLE, "Transcription empty.")
                     continue
                 
+                log(f"💬 User said: \"{user_text}\"")
                 self.append_to_text(f"YOU: {user_text}")
                 self.interrupted.clear()
                 self.chat_and_respond(user_text, img_path=None)
@@ -810,6 +819,7 @@ class BotGUI:
 
     def record_voice_adaptive(self, filename="input.wav"):
         print("Recording (Adaptive)...", flush=True)
+        log("🎙️ Recording started (adaptive mode)")
         time.sleep(0.5) 
         samplerate = choose_input_samplerate(INPUT_DEVICE_NAME, CURRENT_CONFIG.get("input_sample_rate"))
 
@@ -848,8 +858,10 @@ class BotGUI:
                     sd.sleep(int(chunk_duration * 1000))
         except Exception as e: 
             print(f"[AUDIO ERROR] Adaptive Recording Failed: {e}", flush=True)
+            log(f"❌ Recording failed: {e}")
             return None 
         
+        log(f"✅ Recording finished, saved to {filename} @ {samplerate}Hz")
         return self.save_audio_buffer(buffer, filename, samplerate)
 
     def record_voice_ptt(self, filename="input.wav"):
@@ -1030,7 +1042,7 @@ class BotGUI:
                         with self.tts_queue_lock: self.tts_queue.append(chat_text)
                         self.session_memory.append({"role": "assistant", "content": chat_text})
                         self.wait_for_tts()
-                        self.set_state(BotStates.IDLE, "Ready")
+                        self._end_response(chat_text)
                         return
 
                     if tool_result == "IMAGE_CAPTURE_TRIGGERED":
@@ -1087,11 +1099,20 @@ class BotGUI:
                 self.session_memory.append({"role": "assistant", "content": full_response_buffer}) 
             
             self.wait_for_tts()
-            self.set_state(BotStates.IDLE, "Ready")
+            self._end_response(full_response_buffer)
                 
         except Exception as e:
             print(f"LLM Error: {e}")
             self.set_state(BotStates.ERROR, "Brain Freeze!")
+
+    def _end_response(self, response_text):
+        """Log LLM response, show random end face, return to dormido."""
+        log(f"🤖 LLM: \"{response_text[:200]}{'...' if len(response_text) > 200 else ''}\"")
+        end_faces = ["feliz", "sonrisa", "guino", "beso", "fiesta", "risueno", "corazon"]
+        candidates = [f for f in end_faces if f in self.animations]
+        end_face = random.choice(candidates) if candidates else BotStates.DORMIDO
+        self.set_state(end_face, "Done!")
+        self.master.after(2000, lambda: self.set_state(BotStates.IDLE, "Ready"))
 
     def wait_for_tts(self):
         while self.tts_queue or self.tts_active.is_set():
