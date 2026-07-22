@@ -1,0 +1,445 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width">
+<title>BMO Faces Gallery</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a2e;color:#eee;font-family:system-ui,-apple-system,sans-serif;padding:2rem}
+h1{font-size:2rem;margin-bottom:.3rem;color:#98d8c8}
+.sub{color:#888;margin-bottom:2rem}
+h2{font-size:1.2rem;margin:2rem 0 1rem;padding-bottom:.3rem;border-bottom:2px solid #333}
+h2 .b{font-size:.65rem;padding:2px 8px;border-radius:10px;margin-left:8px;vertical-align:middle}
+.b-blu{background:#1e3a5f;color:#6ab0f3}
+.b-yel{background:#3a2e1e;color:#f3c86a}
+.b-grn{background:#1e3a2e;color:#6af3a0}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:1rem}
+.card{background:#16213e;border-radius:12px;overflow:hidden;border:1px solid #2a2a4a;cursor:pointer;transition:transform .15s,border-color .15s}
+.card:hover{transform:scale(1.03);border-color:#6ab0f3}
+.card img{width:100%;aspect-ratio:800/480;object-fit:cover;display:block;background:#98d8c8;pointer-events:none}
+.card-body{padding:.5rem .7rem}
+.card-body .nm{font-weight:600;font-size:.9rem}
+.card-body .fr{font-size:.75rem;color:#888}
+.card-body .dc{font-size:.75rem;color:#aaa;margin-top:.15rem}
+.stats{background:#16213e;border-radius:12px;padding:.8rem 1.2rem;margin-bottom:1.5rem;border:1px solid #2a2a4a;display:inline-block}
+.stats s{font-size:1.1rem;font-weight:700;color:#98d8c8}
+.anim-badge{display:inline-block;background:#f3c86a;color:#1a1a2e;font-size:.6rem;padding:1px 6px;border-radius:6px;margin-left:4px;font-weight:700}
+/* Overlay player */
+#player{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.85);z-index:999;justify-content:center;align-items:center;flex-direction:column}
+#player.show{display:flex}
+#player img{width:min(800px,90vw);aspect-ratio:800/480;object-fit:cover;border-radius:12px;background:#98d8c8;box-shadow:0 0 40px rgba(0,0,0,.5)}
+#player .pname{color:#98d8c8;font-size:1.3rem;margin-top:1rem}
+#player .pinfo{color:#888;font-size:.85rem;margin-top:.3rem}
+#player .pclose{position:absolute;top:20px;right:30px;color:#fff;font-size:2rem;cursor:pointer;opacity:.7;transition:opacity .15s}
+#player .pclose:hover{opacity:1}
+#player .pplay{color:#aaa;font-size:.85rem;margin-top:.5rem;cursor:pointer;text-decoration:underline}
+#player .pframes{display:flex;gap:6px;margin-top:.8rem;justify-content:center}
+#player .pframes span{width:20px;height:4px;border-radius:2px;background:#444;transition:background .15s}
+#player .pframes span.act{background:#98d8c8}
+</style></head>
+<body>
+<h1>🤖 BMO Faces Gallery</h1>
+<p class="sub">Click en cualquier cara para ver animación · be-more-agent · 800×480</p>
+<div class="stats">😀 <s>28</s> expresiones · 🖼️ <s>43</s> frames</div>
+
+<div id="gallery"></div>
+
+<!-- Overlay player -->
+<div id="player">
+  <span class="pclose" onclick="closePlayer()">✕</span>
+  <img id="pimg" src="" alt="">
+  <div class="pname" id="pname"></div>
+  <div class="pinfo" id="pinfo"></div>
+  <div class="pframes" id="pframes"></div>
+  <div class="pplay" id="pplay" onclick="togglePlay()">⏸️ pausar</div>
+</div>
+
+<script>
+const FACES = [
+  {
+    "name": "warmup",
+    "frames": 1,
+    "desc": "Inicio / boot",
+    "first": "01.png",
+    "files": [
+      "01.png"
+    ]
+  },
+  {
+    "name": "idle",
+    "frames": 1,
+    "desc": "Esperando",
+    "first": "01.png",
+    "files": [
+      "01.png"
+    ]
+  },
+  {
+    "name": "listening",
+    "frames": 2,
+    "desc": "Escuchando",
+    "first": "01.png",
+    "files": [
+      "01.png",
+      "02.png"
+    ]
+  },
+  {
+    "name": "thinking",
+    "frames": 4,
+    "desc": "Pensando",
+    "first": "01.png",
+    "files": [
+      "01.png",
+      "02.png",
+      "03.png",
+      "04.png"
+    ]
+  },
+  {
+    "name": "speaking",
+    "frames": 3,
+    "desc": "Hablando",
+    "first": "01.png",
+    "files": [
+      "01.png",
+      "02.png",
+      "03.png"
+    ]
+  },
+  {
+    "name": "error",
+    "frames": 1,
+    "desc": "Error",
+    "first": "01.png",
+    "files": [
+      "01.png"
+    ]
+  },
+  {
+    "name": "capturing",
+    "frames": 1,
+    "desc": "Capturando foto",
+    "first": "01.png",
+    "files": [
+      "01.png"
+    ]
+  },
+  {
+    "name": "blink",
+    "frames": 5,
+    "desc": "Parpadeo",
+    "first": "01.png",
+    "files": [
+      "01.png",
+      "02.png",
+      "03.png",
+      "04.png",
+      "05.png"
+    ]
+  },
+  {
+    "name": "corazon",
+    "frames": 4,
+    "desc": "Enamorado \u2764\ufe0f animado (late)",
+    "first": "01.png",
+    "files": [
+      "01.png",
+      "02.png",
+      "03.png",
+      "04.png"
+    ]
+  },
+  {
+    "name": "enojado",
+    "frames": 1,
+    "desc": "Enojado",
+    "first": "01.png",
+    "files": [
+      "01.png"
+    ]
+  },
+  {
+    "name": "feliz",
+    "frames": 1,
+    "desc": "Feliz",
+    "first": "01.png",
+    "files": [
+      "01.png"
+    ]
+  },
+  {
+    "name": "shrek_cat",
+    "frames": 1,
+    "desc": "Meme Shrek",
+    "first": "01.png",
+    "files": [
+      "01.png"
+    ]
+  },
+  {
+    "name": "sorprendido",
+    "frames": 1,
+    "desc": "Sorprendido",
+    "first": "01.png",
+    "files": [
+      "01.png"
+    ]
+  },
+  {
+    "name": "sospechoso",
+    "frames": 1,
+    "desc": "Sospechoso",
+    "first": "01.png",
+    "files": [
+      "01.png"
+    ]
+  },
+  {
+    "name": "triste",
+    "frames": 2,
+    "desc": "Triste",
+    "first": "01.png",
+    "files": [
+      "01.png",
+      "02.png"
+    ]
+  },
+  {
+    "name": "guino",
+    "frames": 1,
+    "desc": "Gui\u00f1o",
+    "first": "01.png",
+    "files": [
+      "01.png"
+    ]
+  },
+  {
+    "name": "fiesta",
+    "frames": 1,
+    "desc": "Fiesta \ud83c\udf89",
+    "first": "01.png",
+    "files": [
+      "01.png"
+    ]
+  },
+  {
+    "name": "beso",
+    "frames": 1,
+    "desc": "Beso \ud83d\ude18",
+    "first": "01.png",
+    "files": [
+      "01.png"
+    ]
+  },
+  {
+    "name": "dormido",
+    "frames": 2,
+    "desc": "Dormido Zzz",
+    "first": "01.png",
+    "files": [
+      "01.png",
+      "02.png"
+    ]
+  },
+  {
+    "name": "confundido",
+    "frames": 1,
+    "desc": "Confundido \u00bf?",
+    "first": "01.png",
+    "files": [
+      "01.png"
+    ]
+  },
+  {
+    "name": "asustado",
+    "frames": 1,
+    "desc": "Asustado \ud83d\ude28",
+    "first": "01.png",
+    "files": [
+      "01.png"
+    ]
+  },
+  {
+    "name": "llorando",
+    "frames": 2,
+    "desc": "Llorando \ud83d\ude2d",
+    "first": "01.png",
+    "files": [
+      "01.png",
+      "02.png"
+    ]
+  },
+  {
+    "name": "sonrisa",
+    "frames": 1,
+    "desc": "Sonrisa",
+    "first": "01.png",
+    "files": [
+      "01.png"
+    ]
+  },
+  {
+    "name": "frio",
+    "frames": 1,
+    "desc": "Fr\u00edo \ud83e\udd76",
+    "first": "01.png",
+    "files": [
+      "01.png"
+    ]
+  },
+  {
+    "name": "timido",
+    "frames": 1,
+    "desc": "T\u00edmido \ud83e\udd7a",
+    "first": "01.png",
+    "files": [
+      "01.png"
+    ]
+  },
+  {
+    "name": "hambre",
+    "frames": 1,
+    "desc": "Hambre \ud83e\udd24",
+    "first": "01.png",
+    "files": [
+      "01.png"
+    ]
+  },
+  {
+    "name": "risueno",
+    "frames": 2,
+    "desc": "Risue\u00f1o \ud83d\ude02",
+    "first": "01.png",
+    "files": [
+      "01.png",
+      "02.png"
+    ]
+  },
+  {
+    "name": "bostezo",
+    "frames": 2,
+    "desc": "Bostezo \ud83e\udd71",
+    "first": "01.png",
+    "files": [
+      "01.png",
+      "02.png"
+    ]
+  }
+];
+
+const cats = [
+  {name:"Funcionales (originales)",badge:"b-blu",keys:["warmup","idle","listening","thinking","speaking","error","capturing"]},
+  {name:"Tuyas (madrugada)",badge:"b-yel",keys:["blink","corazon","enojado","feliz","shrek_cat","sorprendido","sospechoso"]},
+  {name:"Inventadas por Hermes",badge:"b-grn",keys:["triste","guino","fiesta","beso","dormido","confundido","asustado","llorando","sonrisa","frio","timido","hambre","risueno","bostezo"]},
+];
+
+const faceMap = {};
+FACES.forEach(f => faceMap[f.name] = f);
+
+const gallery = document.getElementById('gallery');
+cats.forEach(cat => {
+  const sec = document.createElement('div');
+  const faces = cat.keys.map(k => faceMap[k]).filter(Boolean);
+  sec.innerHTML = `<h2>${cat.name} <span class="b ${cat.badge}">${faces.length}</span></h2>`;
+  const grid = document.createElement('div'); grid.className = 'grid';
+  faces.forEach(f => {
+    const badge = f.frames > 1 ? `<span class="anim-badge">🎬 ${f.frames}</span>` : '';
+    const card = document.createElement('div'); card.className = 'card';
+    card.innerHTML = `<img src="faces/${f.name}/${f.first}" alt="${f.name}" loading="lazy">
+      <div class="card-body"><div class="nm">${f.name} ${badge}</div>
+      <div class="fr">${f.frames} frame${f.frames>1?'s':''}</div>
+      <div class="dc">${f.desc}</div></div>`;
+    card.onclick = () => openPlayer(f.name);
+    grid.appendChild(card);
+  });
+  sec.appendChild(grid); gallery.appendChild(sec);
+});
+
+// ── Player ──
+let playerFace = null, playerRunning = false, playerPaused = false;
+let playerTimer = null, playerPauseTimer = null;
+let playerIdx = 0;
+const pimg = document.getElementById('pimg');
+const pname = document.getElementById('pname');
+const pinfo = document.getElementById('pinfo');
+const pframes = document.getElementById('pframes');
+const pplay = document.getElementById('pplay');
+
+function openPlayer(name) {
+  const f = faceMap[name];
+  if (!f) return;
+  closePlayer();
+  playerFace = f;
+  document.getElementById('player').classList.add('show');
+  pname.textContent = f.name + (f.frames > 1 ? ' (animación)' : '');
+  pinfo.textContent = f.frames + ' frame' + (f.frames>1?'s':'');
+  
+  // Build frame dots
+  pframes.innerHTML = '';
+  for (let i = 0; i < f.frames; i++) {
+    const dot = document.createElement('span');
+    pframes.appendChild(dot);
+  }
+  
+  if (f.frames > 1) {
+    playerRunning = true;
+    playerPaused = false;
+    pplay.textContent = '⏸️ pausar';
+    playerIdx = 0;
+    playFrame();
+  } else {
+    playerRunning = false;
+    pplay.textContent = '🔒 1 frame — sin animación';
+    pimg.src = 'faces/' + f.name + '/' + f.first;
+  }
+}
+
+function playFrame() {
+  if (!playerRunning || !playerFace) return;
+  if (playerPaused) return;
+  
+  const f = playerFace;
+  pimg.src = 'faces/' + f.name + '/' + f.files[playerIdx];
+  
+  // Update dots
+  const dots = pframes.querySelectorAll('span');
+  dots.forEach((d,i) => d.classList.toggle('act', i === playerIdx));
+  
+  playerIdx++;
+  
+  if (playerIdx >= f.frames) {
+    // Animation complete — pause 5s then restart
+    playerPaused = true;
+    pplay.textContent = '⏸️ pausa 5s...';
+    playerPauseTimer = setTimeout(() => {
+      if (!playerRunning) return;
+      playerIdx = 0;
+      playerPaused = false;
+      pplay.textContent = '⏸️ pausar';
+      playFrame();
+    }, 5000);
+  } else {
+    playerTimer = setTimeout(playFrame, 120);
+  }
+}
+
+function togglePlay() {
+  if (!playerRunning || !playerFace || playerFace.frames <= 1) return;
+  playerPaused = !playerPaused;
+  pplay.textContent = playerPaused ? '▶️ reanudar' : '⏸️ pausar';
+  if (!playerPaused) {
+    if (playerPauseTimer) { clearTimeout(playerPauseTimer); playerPauseTimer = null; }
+    playFrame();
+  }
+}
+
+function closePlayer() {
+  playerRunning = false;
+  playerPaused = false;
+  if (playerTimer) { clearTimeout(playerTimer); playerTimer = null; }
+  if (playerPauseTimer) { clearTimeout(playerPauseTimer); playerPauseTimer = null; }
+  document.getElementById('player').classList.remove('show');
+}
+
+// ESC to close
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePlayer(); });
+</script>
+</body></html>
