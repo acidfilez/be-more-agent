@@ -92,7 +92,7 @@ def load_config():
                 user_config = json.load(f)
                 config.update(user_config)
         except Exception as e:
-            print(f"Config Error: {e}. Using defaults.")
+            log(f"⚠️ Config error: {e}. Using defaults.")
     return config
 
 CURRENT_CONFIG = load_config()
@@ -107,32 +107,32 @@ def resolve_input_device(config):
     try:
         devices = sd.query_devices()
     except Exception as e:
-        print(f"[AUDIO] Device query failed: {e}", flush=True)
+        log(f"[AUDIO] Device query failed: {e}")
         return None
 
     if isinstance(requested, int) or (isinstance(requested, str) and requested.isdigit()):
         index = int(requested)
         if 0 <= index < len(devices):
             return index
-        print(f"[AUDIO] Input device index not found: {index}", flush=True)
+        log(f"[AUDIO] Input device index not found: {index}")
         return None
 
     requested_lower = str(requested).lower()
     for idx, dev in enumerate(devices):
-        print(f"[AUDIO DEBUG] Index {idx}: {dev.get('name')} (In: {dev.get('max_input_channels')})", flush=True) # DEBUG LINE
+        log(f"[AUDIO DEBUG] Index {idx}: {dev.get('name')} (In: {dev.get('max_input_channels')})")
         if dev.get("max_input_channels", 0) > 0 and requested_lower in dev.get("name", "").lower():
             return idx
 
-    print(f"[AUDIO] Input device name not found: {requested}", flush=True)
+    log(f"[AUDIO] Input device name not found: {requested}")
     return None
 
 INPUT_DEVICE_NAME = resolve_input_device(CURRENT_CONFIG)
 if INPUT_DEVICE_NAME is not None:
     try:
         device_info = sd.query_devices(INPUT_DEVICE_NAME)
-        print(f"[AUDIO] Using input device: {device_info.get('name', INPUT_DEVICE_NAME)}", flush=True)
+        log(f"[AUDIO] Using input device: {device_info.get('name', INPUT_DEVICE_NAME)}")
     except Exception:
-        print(f"[AUDIO] Using input device index: {INPUT_DEVICE_NAME}", flush=True)
+        log(f"[AUDIO] Using input device index: {INPUT_DEVICE_NAME}")
 
 def choose_input_samplerate(device, preferred=None):
     candidates = []
@@ -140,11 +140,11 @@ def choose_input_samplerate(device, preferred=None):
         candidates.append(preferred)
     try:
         device_info = sd.query_devices(device)
-        print(f"[AUDIO DEBUG] Device Info: {device_info}", flush=True) # DEBUG
+        log(f"[AUDIO DEBUG] Device Info: {device_info}")
         if "default_samplerate" in device_info:
             candidates.append(int(device_info["default_samplerate"]))
     except Exception as e:
-        print(f"[AUDIO DEBUG] Query failed: {e}", flush=True)
+        log(f"[AUDIO DEBUG] Query failed: {e}")
         pass
 
     candidates.extend([48000, 44100, 32000, 16000])
@@ -292,13 +292,13 @@ class BotGUI:
         self.exiting = False
         
         # --- WAKE WORD INITIALIZATION ---
-        print("[INIT] Loading Wake Word...", flush=True)
+        log("🔊 Loading wake word model...")
         self.oww_model = None
         try:
             self.oww_model = Model(wakeword_models=[WAKE_WORD_MODEL], inference_framework="onnx")
-            print(f"[INIT] Wake Word Loaded — model: {WAKE_WORD_MODEL}", flush=True)
+            log(f"✅ Wake word loaded — model: {WAKE_WORD_MODEL}")
         except Exception as e:
-            print(f"[CRITICAL] Failed to load wake word model: {e}")
+            log(f"❌ Failed to load wake word model: {e}")
 
         # GUI Setup
         self.background_label = tk.Label(master)
@@ -335,7 +335,7 @@ class BotGUI:
         if self.exiting:
             return
         self.exiting = True
-        print("\n--- SHUTDOWN SEQUENCE ---", flush=True)
+        log("🛑 SHUTDOWN SEQUENCE")
         if self.current_audio_process:
             try:
                 self.current_audio_process.terminate()
@@ -383,11 +383,11 @@ class BotGUI:
         self.last_ptt_time = current_time
 
         if self.recording_active.is_set():
-            print("[PTT] Toggle OFF", flush=True)
+            log("[PTT] Toggle OFF")
             self.recording_active.clear() 
         else:
             if self.current_state == BotStates.IDLE or "Wait" in self.status_var.get():
-                print("[PTT] Toggle ON", flush=True)
+                log("[PTT] Toggle ON")
                 self.recording_active.set() 
                 self.ptt_event.set()
 
@@ -454,7 +454,7 @@ class BotGUI:
             self.idle_emotion_timer = None
 
         def _update():
-            if msg: print(f"[STATE] {state.upper()}: {msg}", flush=True)
+            if msg: log(f"🔄 {state.upper()}: {msg}")
             if self.current_state != state:
                 self.current_state = state
                 self.current_frame_index = 0
@@ -496,7 +496,7 @@ class BotGUI:
         face = random.choice(candidates)
         self.current_state = face
         self.current_frame_index = 0
-        print(f"[IDLE EMOTION] → {face}", flush=True)
+        log(f"😴 IDLE EMOTION → {face}")
 
         # Return to IDLE after 4s
         def back_to_idle():
@@ -545,7 +545,7 @@ class BotGUI:
         }
 
         action = ALIASES.get(raw_action, raw_action)
-        print(f"ACTION: {raw_action} -> {action}", flush=True)
+        log(f"⚡ ACTION: {raw_action} -> {action}")
 
         if action not in VALID_TOOLS:
             if value and isinstance(value, str) and len(value.split()) > 1:
@@ -557,7 +557,7 @@ class BotGUI:
             return f"The current time is {now}."
         
         elif action == "search_web":
-            print(f"Searching web for: {value}...", flush=True)
+            log(f"🔍 Searching web for: {value}...")
             try:
                 # 'us-en' region is often more stable for CLI queries
                 with DDGS() as ddgs:
@@ -566,19 +566,19 @@ class BotGUI:
                     try:
                         results = list(ddgs.news(value, region='us-en', max_results=1))
                         if results: 
-                            print(f"[DEBUG] Found News: {results[0].get('title')}", flush=True)
+                            log(f"[DEBUG] Found News: {results[0].get('title')}")
                     except Exception as e: 
-                        print(f"[DEBUG] News Search Error: {e}", flush=True)
+                        log(f"[DEBUG] News Search Error: {e}")
                     
                     # 2. Text fallback
                     if not results:
-                        print("[DEBUG] No news found, trying text search...", flush=True)
+                        log("[DEBUG] No news found, trying text search...")
                         try: 
                             results = list(ddgs.text(value, region='us-en', max_results=1))
                             if results: 
-                                print(f"[DEBUG] Found Text: {results[0].get('title')}", flush=True)
+                                log(f"[DEBUG] Found Text: {results[0].get('title')}")
                         except Exception as e:
-                             print(f"[DEBUG] Text Search Error: {e}", flush=True)
+                            log(f"[DEBUG] Text Search Error: {e}")
 
                     if results:
                         r = results[0]
@@ -587,10 +587,10 @@ class BotGUI:
                         body = r.get('body', r.get('snippet', 'No Body'))
                         return f"SEARCH RESULTS for '{value}':\nTitle: {title}\nSnippet: {body[:300]}"
                     else: 
-                        print(f"[DEBUG] Search returned 0 results.", flush=True)
+                        log("[DEBUG] Search returned 0 results.")
                         return "SEARCH_EMPTY"
             except Exception as e:
-                print(f"[DEBUG] Connection/Library Error: {e}", flush=True)
+                log(f"[DEBUG] Connection/Library Error: {e}")
                 return "SEARCH_ERROR"
         
         elif action == "capture_image":
@@ -684,9 +684,9 @@ class BotGUI:
         try:
             ollama.generate(model=TEXT_MODEL, prompt="", keep_alive=-1)
         except Exception as e:
-            print(f"Failed to load {TEXT_MODEL}: {e}", flush=True)
+            log(f"❌ Failed to load {TEXT_MODEL}: {e}")
         self.play_sound(self.get_random_sound(greeting_sounds_dir))
-        print("Models loaded.", flush=True)
+        log("✅ Models loaded, ready to go!")
 
     def detect_wake_word_or_ptt(self):
         self.set_state(BotStates.IDLE, "Waiting...")
@@ -721,7 +721,7 @@ class BotGUI:
         except StopIteration as si:
             return str(si)
         except Exception as e:
-            print(f"[AUDIO] Stream failed with defaults: {e}. Retrying with loose settings...", flush=True)
+            log(f"[AUDIO] Stream failed with defaults: {e}. Retrying with loose settings...")
             try:
                 # Second attempt: Let PortAudio decide blocksize (0) and latency
                 stream_args["blocksize"] = 0 
@@ -735,7 +735,7 @@ class BotGUI:
             except StopIteration as si:
                 return str(si)
             except Exception as e2:
-                print(f"[CRITICAL] Wake Word Stream Error: {e2}")
+                log(f"[CRITICAL] Wake Word Stream Error: {e2}")
                 self.ptt_event.wait()
                 return "PTT"
         
@@ -750,7 +750,7 @@ class BotGUI:
         # Let's try to be less aggressive with reads.
         
          with sd.InputStream(**stream_args) as stream:
-                print(f"[AUDIO] Listening with rate {stream_args['samplerate']} and block {stream_args['blocksize']}", flush=True)
+                log(f"[AUDIO] Listening with rate {stream_args['samplerate']} and block {stream_args['blocksize']}")
                 
                 # Pre-allocate buffer for speed
                 # If blocksize is 0, we read what is available.
@@ -773,10 +773,7 @@ class BotGUI:
                     try:
                         data, overflow = stream.read(read_size)
                         if overflow:
-                            print("!", end="", flush=True) 
-                            # If we overflow excessively, raise error to trigger fallback to SAFE MODE (PulseAudio/Software)
-                            # We can use a simple counter attached to the function or object, but here raising immediately 
-                            # after a few in a row is safest.
+                            log("⚠️ Audio buffer overflow!")
                             raise RuntimeError("Audio Buffer Overflow - Triggering Safe Mode")
                     except Exception as e:
                         # Convert uncatchable PaErrorCode wrapper to standard Exception if needed
@@ -808,17 +805,14 @@ class BotGUI:
                         prediction = self.oww_model.predict(audio_data)
                         for mdl in self.oww_model.prediction_buffer.keys():
                             score = list(self.oww_model.prediction_buffer[mdl])[-1]
-                            if score > 0.1: # Show potential triggers
-                                print(f"\r[Oww] Score: {score:.3f} | Vol: {current_max}   ", end="", flush=True)
-
+                            log(f"[Oww] Score: {score:.3f} | Vol: {current_max}")
                             if score > WAKE_WORD_THRESHOLD:
-                                print(f"\n[WAKE] Triggered on '{mdl}' with score: {score:.2f}", flush=True)
+                                log(f"[WAKE] Triggered on '{mdl}' with score: {score:.2f}")
                                 self.oww_model.reset() 
                                 return # Success
 
 
     def record_voice_adaptive(self, filename="input.wav"):
-        print("Recording (Adaptive)...", flush=True)
         log("🎙️ Recording started (adaptive mode)")
         time.sleep(0.5) 
         samplerate = choose_input_samplerate(INPUT_DEVICE_NAME, CURRENT_CONFIG.get("input_sample_rate"))
@@ -857,15 +851,14 @@ class BotGUI:
                 while not silence_started and recorded_chunks < max_chunks:
                     sd.sleep(int(chunk_duration * 1000))
         except Exception as e: 
-            print(f"[AUDIO ERROR] Adaptive Recording Failed: {e}", flush=True)
-            log(f"❌ Recording failed: {e}")
+            log(f"❌ Adaptive recording failed: {e}")
             return None 
         
         log(f"✅ Recording finished, saved to {filename} @ {samplerate}Hz")
         return self.save_audio_buffer(buffer, filename, samplerate)
 
     def record_voice_ptt(self, filename="input.wav"):
-        print("Recording (PTT)...", flush=True)
+        log("🎙️ Recording started (PTT mode)")
         time.sleep(0.5)
         samplerate = choose_input_samplerate(INPUT_DEVICE_NAME, CURRENT_CONFIG.get("input_sample_rate"))
 
@@ -882,7 +875,7 @@ class BotGUI:
                 while self.recording_active.is_set(): 
                     sd.sleep(50)
         except Exception as e: 
-            print(f"[AUDIO ERROR] PTT Recording Failed: {e}", flush=True)
+            log(f"❌ PTT recording failed: {e}")
             return None
             
         return self.save_audio_buffer(buffer, filename, samplerate)
@@ -901,7 +894,7 @@ class BotGUI:
         return filename
 
     def transcribe_audio(self, filename):
-        print("Transcribing...", flush=True)
+        log("🎤 Transcribing...")
         try:
             result = subprocess.run(
                 ["./whisper.cpp/build/bin/whisper-cli", "-m", "./whisper.cpp/models/ggml-base.en.bin", "-l", "en", "-t", "4", "-f", filename],
@@ -913,10 +906,10 @@ class BotGUI:
                 if ']' in last_line: transcription = last_line.split("]")[1].strip()
                 else: transcription = last_line
             else: transcription = ""
-            print(f"Heard: '{transcription}'", flush=True)
+            log(f"👂 Heard: '{transcription}'")
             return transcription.strip()
         except Exception as e:
-            print(f"Transcription Error: {e}")
+            log(f"❌ Transcription error: {e}")
             return ""
 
     def capture_image(self):
@@ -930,13 +923,13 @@ class BotGUI:
                         ["rpicam-still", "-t", "500", "-n", "--width", "640", "--height", "480", "-o", BMO_IMAGE_FILE],
                         check=True, capture_output=True, timeout=10
                     )
-                    print("[CAM] Captured with rpicam-still", flush=True)
+                    log("[CAM] Captured with rpicam-still")
                     return self._rotate_and_return()
                 except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                     if cam_device == "rpicam":
-                        print(f"[CAM] rpicam failed: {e}", flush=True)
+                        log(f"[CAM] rpicam failed: {e}")
                         return None
-                    print(f"[CAM] rpicam not available, trying USB webcam...", flush=True)
+                    log("[CAM] rpicam not available, trying USB webcam...")
 
             # Fallback: ffmpeg USB webcam
             dev = cam_device if cam_device not in ("auto", "rpicam") else "/dev/video0"
@@ -946,14 +939,14 @@ class BotGUI:
                      "-vframes", "1", "-s", "640x480", "-y", BMO_IMAGE_FILE],
                     check=True, capture_output=True, timeout=10
                 )
-                print(f"[CAM] Captured with ffmpeg from {dev}", flush=True)
+                log(f"[CAM] Captured with ffmpeg from {dev}")
                 return self._rotate_and_return()
             except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                print(f"[CAM] ffmpeg failed on {dev}: {e}", flush=True)
+                log(f"[CAM] ffmpeg failed on {dev}: {e}")
                 return None
 
         except Exception as e:
-            print(f"[CAM] Unexpected error: {e}", flush=True)
+            log(f"[CAM] Unexpected error: {e}")
             return None
 
     def _rotate_and_return(self):
@@ -964,7 +957,7 @@ class BotGUI:
                 img = img.rotate(rotation, expand=True)
                 img.save(BMO_IMAGE_FILE)
             except Exception as e:
-                print(f"[CAM] Rotation failed: {e}", flush=True)
+                log(f"[CAM] Rotation failed: {e}")
         return BMO_IMAGE_FILE
 
     # =========================================================================
@@ -1102,7 +1095,7 @@ class BotGUI:
             self._end_response(full_response_buffer)
                 
         except Exception as e:
-            print(f"LLM Error: {e}")
+            log(f"❌ LLM error: {e}")
             self.set_state(BotStates.ERROR, "Brain Freeze!")
 
     def _end_response(self, response_text):
@@ -1135,7 +1128,7 @@ class BotGUI:
         clean = re.sub(r"[^\w\s,.!?:-]", "", text)
         if not clean.strip(): return
         
-        print(f"[PIPER SPEAKING] '{clean}'", flush=True)
+        log(f"🗣️ Piper TTS: '{clean}'")
         voice_model = CURRENT_CONFIG.get("voice_model", "piper/en_GB-semaine-medium.onnx")
         
         try:
@@ -1183,7 +1176,7 @@ class BotGUI:
                 time.sleep(0.5) 
                     
         except Exception as e:
-            print(f"Audio Error: {e}")
+            log(f"🔊 Audio error: {e}")
         finally:
             self.current_volume = 0 
             if self.current_audio_process:
@@ -1247,7 +1240,7 @@ class BotGUI:
             json.dump([full[0]] + conv, f, indent=4)
 
 if __name__ == "__main__":
-    print("--- SYSTEM STARTING ---", flush=True)
+    log("🚀 SYSTEM STARTING")
     root = tk.Tk()
     app = BotGUI(root)
     root.mainloop()
