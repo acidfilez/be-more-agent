@@ -805,9 +805,8 @@ class BotGUI:
                         prediction = self.oww_model.predict(audio_data)
                         for mdl in self.oww_model.prediction_buffer.keys():
                             score = list(self.oww_model.prediction_buffer[mdl])[-1]
-                            log(f"[Oww] Score: {score:.3f} | Vol: {current_max}")
                             if score > WAKE_WORD_THRESHOLD:
-                                log(f"[WAKE] Triggered on '{mdl}' with score: {score:.2f}")
+                                log(f"🔊 Wake word triggered! score={score:.2f}")
                                 self.oww_model.reset() 
                                 return # Success
 

@@ -18,6 +18,7 @@ piper/
 memory.json
 chat_memory.json
 # config.json
+whisper.cpp/
 
 # --- Temporary/Generated Media ---
 *.wav
@@ -31,6 +32,8 @@ test_audio.wav
 .DS_Store
 Thumbs.db
 ehthumbs.db
+*.log
+bmo.log
 
 # --- PNG: ignore everywhere EXCEPT faces/ and faces_v2/ ---
 *.png
