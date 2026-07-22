@@ -289,20 +289,11 @@ class BotGUI:
         # --- WAKE WORD INITIALIZATION ---
         print("[INIT] Loading Wake Word...", flush=True)
         self.oww_model = None
-        if os.path.exists(WAKE_WORD_MODEL):
-            try:
-                self.oww_model = Model(wakeword_model_paths=[WAKE_WORD_MODEL])
-                print("[INIT] Wake Word Loaded.", flush=True)
-            except TypeError:
-                try:
-                    self.oww_model = Model(wakeword_models=[WAKE_WORD_MODEL])
-                    print("[INIT] Wake Word Loaded (New API).", flush=True)
-                except Exception as e:
-                    print(f"[CRITICAL] Failed to load model: {e}")
-            except Exception as e:
-                print(f"[CRITICAL] Failed to load model: {e}")
-        else:
-            print(f"[CRITICAL] Model not found: {WAKE_WORD_MODEL}")
+        try:
+            self.oww_model = Model(wakeword_models=["hey_jarvis"], inference_framework="tflite")
+            print("[INIT] Wake Word Loaded — keyword: 'hey'", flush=True)
+        except Exception as e:
+            print(f"[CRITICAL] Failed to load wake word model: {e}")
 
         # GUI Setup
         self.background_label = tk.Label(master)
@@ -473,9 +464,11 @@ class BotGUI:
             else:
                 self.overlay_label.place_forget()
 
-            # Schedule idle emotion cycle when entering IDLE
+            # Show dormido when entering IDLE (sleeping face)
             if state == BotStates.IDLE:
-                self.master.after(100, self._schedule_idle_emotion)
+                self.current_state = BotStates.DORMIDO
+                self.current_frame_index = 0
+                self.master.after(50, self.update_animation)
 
         self.master.after(0, _update)
 
