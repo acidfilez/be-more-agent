@@ -45,13 +45,16 @@ be-more-agent/
 │   ├── thinking_sounds/       # Looping .wav files
 │   ├── ack_sounds/            # "I heard you" .wav files
 │   └── error_sounds/          # Error/Confusion .wav files
-└── faces/                     # Face images folder
-    ├── idle/                  # .png sequence for idle state
-    ├── listening/             # .png sequence for listening
-    ├── thinking/              # .png sequence for thinking
-    ├── speaking/              # .png sequence for speaking
-    ├── error/                 # .png sequence for errors
-    └── warmup/                # .png sequence for startup
+└── faces/                     # Face images folder (28+ expresiones)
+    ├── warmup/               # Pantalla de inicio
+    ├── idle/                 # Esperando
+    ├── listening/            # Escuchando (2 frames)
+    ├── thinking/             # Pensando (4 frames)
+    ├── speaking/             # Hablando (3 frames)
+    ├── error/                # Error
+    ├── capturing/            # Sacando foto
+    ├── blink/                # Parpadeo (5 frames)
+    ├── +22 más → ver README "Catálogo de Caras"
 ```
 
 ---
@@ -123,9 +126,63 @@ This software is a generic framework. You can give it a new personality by repla
 1.  **Faces:** The script looks for PNG sequences in `faces/[state]/`. It will loop through all images found in the folder.
 2.  **Sounds:** Put multiple `.wav` files in the `sounds/[category]/` folders. The robot will pick one at random each time (e.g., different "thinking" hums or "error" buzzes).
 
----
-## 🗣️ The Custom BMO Voice
+## 🗺️ Catálogo de Caras
 
+Todas las caras están en `faces/<nombre>/` y se cargan automáticamente con `load_animations()`. Usan fondo verde `(189, 255, 203)`. La cara `frio` es la única con fondo distinto (azul).
+
+### 😶 Estados del sistema (originales)
+| Cara | Frames | Propósito |
+|------|--------|-----------|
+| `warmup` | 1 | Pantalla de inicio |
+| `idle` | 1 | Esperando |
+| `listening` | 2 | Escuchando |
+| `thinking` | 4 | Pensando |
+| `speaking` | 3 | Hablando |
+| `error` | 1 | Error |
+| `capturing` | 1 | Sacando foto |
+
+### 🌙 Expresiones de madrugada (generadas con face generator)
+| Cara | Frames | Descripción |
+|------|--------|-------------|
+| `blink` | 5 | Animación de parpadeo |
+| `corazon` | 1 | Ojos ❤️ enamorado |
+| `enojado` | 1 | Enojado |
+| `feliz` | 1 | Feliz con sonrojo |
+| `shrek_cat` | 1 | El meme del gato de Shrek |
+| `sorprendido` | 1 | Sorprendido boca en O |
+| `sospechoso` | 1 | Side-eye sospechoso |
+
+### 🎭 Expresiones nuevas (generadas con `generate_faces.py`)
+| Cara | Frames | Descripción |
+|------|--------|-------------|
+| `triste` | 2 | Triste con lágrima |
+| `guino` | 1 | Guiño coqueto |
+| `fiesta` | 1 | Gorrito de fiesta + confeti 🎉 |
+| `beso` | 1 | Labios fruncidos + corazoncito |
+| `dormido` | 2 | Ojos cerrados + Zzz |
+| `confundido` | 1 | Ceja levantada, ojo entrecerrado, ? |
+| `asustado` | 1 | Ojos enormes, pupilas chicas |
+| `llorando` | 2 | Llanto con lágrimas grandes |
+| `sonrisa` | 1 | Sonrisa suave con mejillas |
+| `frio` | 1 | Tiritando, fondo azul ❄️ |
+| `timido` | 1 | Sonrojo, mirada lateral, nervios |
+| `hambre` | 1 | Lengua afuera, babeando |
+| `risueno` | 2 | Carcajada con lengua |
+| `bostezo` | 2 | Bostezo boca grande |
+
+> **Nota sobre el color de fondo:** Las caras originales y de madrugada usan `(189, 255, 203)` (verde claro original). Las expresiones de `generate_faces.py` fueron corregidas para usar el mismo tono. Solo `frio` cambia intencionalmente el fondo a azul `(200, 220, 240)` para dar sensación de frío.
+
+### ▶️ Activar una cara por voz
+```
+"Pon cara de feliz"       → {"action": "show_face", "value": "feliz"}
+"Pon cara triste"         → {"action": "show_face", "value": "triste"}
+"Haz cara de sorpresa"    → {"action": "show_face", "value": "sorprendido"}
+"Muéstrame amor"          → {"action": "show_face", "value": "corazon"}
+```
+
+---
+
+## 🗣️ The Custom BMO Voice
 This project features a custom, locally fine-tuned text-to-speech model to make the agent sound authentic! 
 
 When you run the `setup.sh` script, it will automatically download the compiled `.onnx` model and its `.json` configuration file from the [Releases page](https://github.com/brenpoly/be-more-agent/releases) and place them into a local `voices/` directory.

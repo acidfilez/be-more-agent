@@ -1,0 +1,14 @@
+[Unit]
+Description=BMO Face Gallery — HTTP server on port 9090
+After=network.target
+
+[Service]
+Type=simple
+User=mch
+WorkingDirectory=/home/mch/Projects/be-more-agent
+ExecStart=/usr/bin/python3 -m http.server 9090
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

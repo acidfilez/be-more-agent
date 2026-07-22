@@ -157,21 +157,44 @@ def choose_input_samplerate(device, preferred=None):
     return int(candidates[0]) if candidates else 44100
 
 class BotStates:
-    IDLE = "idle"             
-    LISTENING = "listening"   
-    THINKING = "thinking"     
-    SPEAKING = "speaking"     
-    ERROR = "error"           
-    CAPTURING = "capturing" 
-    WARMUP = "warmup"       
+    # Estados operativos
+    IDLE = "idle"
+    LISTENING = "listening"
+    THINKING = "thinking"
+    SPEAKING = "speaking"
+    ERROR = "error"
+    CAPTURING = "capturing"
+    WARMUP = "warmup"
+    # Estados emocionales
+    BLINK = "blink"
+    CORAZON = "corazon"
+    ENOJADO = "enojado"
+    FELIZ = "feliz"
+    SHREK_CAT = "shrek_cat"
+    SORPRENDIDO = "sorprendido"
+    SOSPECHOSO = "sospechoso"
+    TRISTE = "triste"
+    GUINO = "guino"
+    FIESTA = "fiesta"
+    BESO = "beso"
+    DORMIDO = "dormido"
+    CONFUNDIDO = "confundido"
+    ASUSTADO = "asustado"
+    LLORANDO = "llorando"
+    SONRISA = "sonrisa"
+    FRIO = "frio"
+    TIMIDO = "timido"
+    HAMBRE = "hambre"
+    RISUENO = "risueno"
+    BOSTEZO = "bostezo"
 
 # --- SYSTEM PROMPT ---
 BASE_SYSTEM_PROMPT = """You are a helpful robot assistant running on a Raspberry Pi.
 Personality: Cute, helpful, robot.
 Style: Short sentences. Enthusiastic.
 
-INSTRUCTIONS:
-- If the user asks for a physical action (time, search, photo), output JSON.
+|INSTRUCTIONS:
+- If the user asks for a physical action (time, search, photo, face), output JSON.
 - If the user just wants to chat, reply with NORMAL TEXT.
 
 ### EXAMPLES ###
@@ -187,6 +210,20 @@ You: {"action": "search_web", "value": "robots news"}
 
 User: What do you see right now?
 You: {"action": "capture_image", "value": "environment"}
+
+User: Put on a happy face!
+You: {"action": "show_face", "value": "feliz"}
+
+User: Make a sad face.
+You: {"action": "show_face", "value": "triste"}
+
+User: Look surprised.
+You: {"action": "show_face", "value": "sorprendido"}
+
+User: Show me love.
+You: {"action": "show_face", "value": "corazon"}
+
+Available faces: idle, feliz, triste, enojado, sorprendido, asustado, sonrisa, guino, dormido, confundido, fiesta, beso, llorando, corazon, frio, timido, hambre, risueno, bostezo, sospechoso, shrek_cat
 
 ### END EXAMPLES ###
 """
@@ -210,7 +247,8 @@ class BotGUI:
     def __init__(self, master):
         self.master = master
         master.title("Pi Assistant")
-        master.attributes('-fullscreen', True) 
+        master.attributes('-fullscreen', True)
+        master.config(cursor='none')
         master.bind('<Escape>', self.exit_fullscreen)
         
         # Inputs
@@ -224,6 +262,13 @@ class BotGUI:
         self.animations = {}
         self.current_frame_index = 0
         self.current_overlay_image = None
+        self.idle_emotion_timer = None
+        self.idle_emotion_faces = [
+            "feliz", "sonrisa", "triste", "enojado", "sorprendido", "asustado",
+            "guino", "confundido", "fiesta", "beso", "llorando", "corazon",
+            "frio", "timido", "hambre", "risueno", "bostezo", "sospechoso",
+            "shrek_cat", "blink", "dormido",
+        ]
         
         self.permanent_memory = self.load_chat_history()
         self.session_memory = []
@@ -363,8 +408,13 @@ class BotGUI:
 
     def load_animations(self):
         base_path = "faces"
-        states = ["idle", "listening", "thinking", "speaking", "error", "capturing", "warmup"] 
-        for state in states:
+        # Cargar TODOS los directorios de caras automáticamente
+        if os.path.exists(base_path):
+            all_states = sorted([d for d in os.listdir(base_path)
+                                 if os.path.isdir(os.path.join(base_path, d))])
+        else:
+            all_states = ["idle"]
+        for state in all_states:
             folder = os.path.join(base_path, state)
             self.animations[state] = []
             if os.path.exists(folder):
@@ -400,6 +450,13 @@ class BotGUI:
         self.master.after(speed, self.update_animation)
 
     def set_state(self, state, msg="", cam_path=None):
+        # Cancel idle emotion timer when leaving a state
+        if self.idle_emotion_timer:
+            try:
+                self.master.after_cancel(self.idle_emotion_timer)
+            except: pass
+            self.idle_emotion_timer = None
+
         def _update():
             if msg: print(f"[STATE] {state.upper()}: {msg}", flush=True)
             if self.current_state != state:
@@ -415,7 +472,39 @@ class BotGUI:
                 except: pass
             else:
                 self.overlay_label.place_forget()
+
+            # Schedule idle emotion cycle when entering IDLE
+            if state == BotStates.IDLE:
+                self.master.after(100, self._schedule_idle_emotion)
+
         self.master.after(0, _update)
+
+    def _schedule_idle_emotion(self):
+        """After 20s of idle, show a random emotion face for 4s."""
+        if self.current_state != BotStates.IDLE:
+            return
+        # Pick a random emotion that has frames loaded
+        candidates = [f for f in self.idle_emotion_faces if f in self.animations]
+        if not candidates:
+            return
+        self.idle_emotion_timer = self.master.after(
+            20000, lambda: self._do_idle_emotion_cycle(candidates)
+        )
+
+    def _do_idle_emotion_cycle(self, candidates):
+        """Show a random emotion for 4s, then return to IDLE."""
+        if self.current_state != BotStates.IDLE:
+            return
+        face = random.choice(candidates)
+        self.current_state = face
+        self.current_frame_index = 0
+        print(f"[IDLE EMOTION] → {face}", flush=True)
+
+        # Return to IDLE after 4s
+        def back_to_idle():
+            if self.current_state == face:
+                self.set_state(BotStates.IDLE, f"Idle (was {face})")
+        self.idle_emotion_timer = self.master.after(4000, back_to_idle)
 
     def append_to_text(self, text, newline=True):
         def _update():
@@ -447,13 +536,14 @@ class BotGUI:
         value = action_data.get("value") or action_data.get("query")
         
         VALID_TOOLS = {
-            "get_time", "search_web", "capture_image"
+            "get_time", "search_web", "capture_image", "show_face"
         }
         
         ALIASES = {
             "google": "search_web", "browser": "search_web", "news": "search_web",         
             "search_news": "search_web", "look": "capture_image", "see": "capture_image", 
-            "check_time": "get_time"
+            "check_time": "get_time", "face": "show_face", "emotion": "show_face",
+            "cara": "show_face", "expresion": "show_face"
         }
 
         action = ALIASES.get(raw_action, raw_action)
@@ -507,6 +597,40 @@ class BotGUI:
         
         elif action == "capture_image":
              return "IMAGE_CAPTURE_TRIGGERED"
+
+        elif action == "show_face":
+            face_name = str(value).lower().strip()
+            valid_faces = [s for s in dir(BotStates) if not s.startswith('_')]
+            # Map common name aliases
+            face_map = {
+                "feliz": BotStates.FELIZ, "happy": BotStates.FELIZ, "alegre": BotStates.FELIZ,
+                "sonrisa": BotStates.SONRISA, "smile": BotStates.SONRISA,
+                "triste": BotStates.TRISTE, "sad": BotStates.TRISTE, "tristeza": BotStates.TRISTE,
+                "enojado": BotStates.ENOJADO, "angry": BotStates.ENOJADO, "enojada": BotStates.ENOJADO,
+                "sorprendido": BotStates.SORPRENDIDO, "surprised": BotStates.SORPRENDIDO,
+                "asustado": BotStates.ASUSTADO, "scared": BotStates.ASUSTADO, "miedo": BotStates.ASUSTADO,
+                "llorando": BotStates.LLORANDO, "crying": BotStates.LLORANDO, "llanto": BotStates.LLORANDO,
+                "beso": BotStates.BESO, "kiss": BotStates.BESO, "love": BotStates.CORAZON,
+                "corazon": BotStates.CORAZON, "heart": BotStates.CORAZON, "amor": BotStates.CORAZON,
+                "guino": BotStates.GUINO, "wink": BotStates.GUINO,
+                "dormido": BotStates.DORMIDO, "sleep": BotStates.DORMIDO, "sleepy": BotStates.DORMIDO,
+                "confundido": BotStates.CONFUNDIDO, "confused": BotStates.CONFUNDIDO,
+                "fiesta": BotStates.FIESTA, "party": BotStates.FIESTA, "celebrate": BotStates.FIESTA,
+                "frio": BotStates.FRIO, "cold": BotStates.FRIO,
+                "timido": BotStates.TIMIDO, "shy": BotStates.TIMIDO, "timida": BotStates.TIMIDO,
+                "hambre": BotStates.HAMBRE, "hungry": BotStates.HAMBRE,
+                "risueno": BotStates.RISUENO, "laugh": BotStates.RISUENO, "laughing": BotStates.RISUENO, "risa": BotStates.RISUENO,
+                "bostezo": BotStates.BOSTEZO, "yawn": BotStates.BOSTEZO, "yawning": BotStates.BOSTEZO,
+                "sospechoso": BotStates.SOSPECHOSO, "suspicious": BotStates.SOSPECHOSO,
+                "shrek": BotStates.SHREK_CAT, "shrek_cat": BotStates.SHREK_CAT, "gato": BotStates.SHREK_CAT,
+                "blink": BotStates.BLINK, "parpadeo": BotStates.BLINK,
+                "idle": BotStates.IDLE, "normal": BotStates.IDLE, "neutral": BotStates.IDLE,
+            }
+            target = face_map.get(face_name)
+            if target and target in self.animations:
+                self.master.after(0, lambda s=target: self.set_state(s, f"Face: {target}"))
+                return f"FACE_CHANGED::{target}"
+            return f"FACE_NOT_FOUND::caras disponibles: {', '.join(sorted(self.animations.keys()))}"
 
         return None
 
@@ -792,17 +916,51 @@ class BotGUI:
 
     def capture_image(self):
         self.set_state(BotStates.CAPTURING, "Watching...")
+        cam_device = CURRENT_CONFIG.get("camera_device", "auto")
         try:
-            subprocess.run(["rpicam-still", "-t", "500", "-n", "--width", "640", "--height", "480", "-o", BMO_IMAGE_FILE], check=True)
-            rotation = CURRENT_CONFIG.get("camera_rotation", 0)
-            if rotation != 0:
-                img = Image.open(BMO_IMAGE_FILE)
-                img = img.rotate(rotation, expand=True) 
-                img.save(BMO_IMAGE_FILE)
-            return BMO_IMAGE_FILE
+            # Try rpicam-still first (Raspberry Pi camera module)
+            if cam_device in ("auto", "rpicam"):
+                try:
+                    subprocess.run(
+                        ["rpicam-still", "-t", "500", "-n", "--width", "640", "--height", "480", "-o", BMO_IMAGE_FILE],
+                        check=True, capture_output=True, timeout=10
+                    )
+                    print("[CAM] Captured with rpicam-still", flush=True)
+                    return self._rotate_and_return()
+                except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                    if cam_device == "rpicam":
+                        print(f"[CAM] rpicam failed: {e}", flush=True)
+                        return None
+                    print(f"[CAM] rpicam not available, trying USB webcam...", flush=True)
+
+            # Fallback: ffmpeg USB webcam
+            dev = cam_device if cam_device not in ("auto", "rpicam") else "/dev/video0"
+            try:
+                subprocess.run(
+                    ["ffmpeg", "-f", "v4l2", "-i", dev,
+                     "-vframes", "1", "-s", "640x480", "-y", BMO_IMAGE_FILE],
+                    check=True, capture_output=True, timeout=10
+                )
+                print(f"[CAM] Captured with ffmpeg from {dev}", flush=True)
+                return self._rotate_and_return()
+            except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                print(f"[CAM] ffmpeg failed on {dev}: {e}", flush=True)
+                return None
+
         except Exception as e:
-            print(f"Camera Error: {e}")
+            print(f"[CAM] Unexpected error: {e}", flush=True)
             return None
+
+    def _rotate_and_return(self):
+        rotation = CURRENT_CONFIG.get("camera_rotation", 0)
+        if rotation != 0:
+            try:
+                img = Image.open(BMO_IMAGE_FILE)
+                img = img.rotate(rotation, expand=True)
+                img.save(BMO_IMAGE_FILE)
+            except Exception as e:
+                print(f"[CAM] Rotation failed: {e}", flush=True)
+        return BMO_IMAGE_FILE
 
     # =========================================================================
     # 5. CHAT & RESPOND
