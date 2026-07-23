@@ -816,8 +816,8 @@ class BotGUI:
         time.sleep(0.5) 
         samplerate = choose_input_samplerate(INPUT_DEVICE_NAME, CURRENT_CONFIG.get("input_sample_rate"))
 
-        silence_threshold = 0.006
-        silence_duration = 1.5
+        silence_threshold = 0.02
+        silence_duration = 2.0
         max_record_time = 30.0
         buffer = []
         silent_chunks = 0
@@ -835,6 +835,8 @@ class BotGUI:
             buffer.append(indata.copy())  
             recorded_chunks += 1
             if recorded_chunks < 5: return 
+            if recorded_chunks % 50 == 0:
+                log(f"[VOL] chunk {recorded_chunks}: volume={volume_norm:.5f}, silent_chunks={silent_chunks}")
             if volume_norm < silence_threshold:
                 silent_chunks += 1
                 if silent_chunks >= num_silent_chunks: silence_started = True
