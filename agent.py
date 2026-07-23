@@ -228,7 +228,7 @@ You: {"action": "show_face", "value": "sorprendido"}
 User: Show me love.
 You: {"action": "show_face", "value": "corazon"}
 
-Available faces: idle, feliz, triste, enojado, sorprendido, asustado, sonrisa, guino, dormido, confundido, fiesta, beso, llorando, corazon, frio, timido, hambre, risueno, bostezo, sospechoso, shrek_cat
+Available faces: idle, feliz, enojado, sorprendido, corazon, sospechoso, shrek_cat
 
 ### END EXAMPLES ###
 """
@@ -269,10 +269,8 @@ class BotGUI:
         self.current_overlay_image = None
         self.idle_emotion_timer = None
         self.idle_emotion_faces = [
-            "feliz", "sonrisa", "triste", "enojado", "sorprendido", "asustado",
-            "guino", "confundido", "fiesta", "beso", "llorando", "corazon",
-            "frio", "timido", "hambre", "risueno", "bostezo", "sospechoso",
-            "shrek_cat", "blink", "dormido",
+            "feliz", "enojado", "sorprendido", "corazon",
+            "sospechoso", "shrek_cat", "blink",
         ]
         
         self.permanent_memory = self.load_chat_history()
