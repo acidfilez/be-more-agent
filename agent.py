@@ -228,7 +228,7 @@ You: {"action": "show_face", "value": "sorprendido"}
 User: Show me love.
 You: {"action": "show_face", "value": "corazon"}
 
-Available faces: idle, feliz, enojado, sorprendido, corazon, sospechoso, shrek_cat
+Available faces: idle, feliz, enojado, sorprendido, corazon, sospechoso, shrek_cat, antenas
 
 ### END EXAMPLES ###
 """
@@ -270,7 +270,7 @@ class BotGUI:
         self.idle_emotion_timer = None
         self.idle_emotion_faces = [
             "feliz", "enojado", "sorprendido", "corazon",
-            "sospechoso", "shrek_cat", "blink",
+            "sospechoso", "shrek_cat", "blink", "antenas",
         ]
         
         self.permanent_memory = self.load_chat_history()
