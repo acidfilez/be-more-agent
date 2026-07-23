@@ -1,0 +1,372 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width">
+<title>BMO Agent — Diagramas</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f172a;color:#e2e8f0;font-family:'Segoe UI',system-ui,sans-serif;padding:2rem}
+h1{font-size:1.8rem;color:#22d3ee;margin-bottom:.3rem}
+.sub{color:#94a3b8;margin-bottom:2rem}
+.diagram{background:#1e293b;border-radius:12px;padding:1.5rem;margin-bottom:2rem;border:1px solid #334155}
+.diagram h2{color:#34d399;font-size:1.1rem;margin-bottom:1rem}
+svg text{font-family:'Segoe UI',system-ui,sans-serif}
+.tooltip{font-size:.8rem;color:#94a3b8;margin-top:.8rem;line-height:1.5}
+.tooltip code{background:#334155;padding:1px 5px;border-radius:4px;color:#fbbf24}
+</style></head>
+<body>
+<h1>🤖 BMO Agent — Arquitectura y Flujo</h1>
+<p class="sub">be-more-agent · Raspberry Pi 5 · Ollama + Piper + openwakeword</p>
+
+<!-- Diagram 1: Main Flow -->
+<div class="diagram">
+<h2>📋 1. Flujo Principal (Main Loop)</h2>
+<svg viewBox="0 0 900 620" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:900px">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10" fill="#94a3b8"/></marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10" fill="#34d399"/></marker>
+  </defs>
+
+  <!-- Box 1: Warmup -->
+  <rect x="350" y="10" width="200" height="44" rx="8" fill="#083344" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="450" y="37" text-anchor="middle" fill="#22d3ee" font-size="13" font-weight="600">WARMUP</text>
+  <text x="450" y="63" text-anchor="middle" fill="#64748b" font-size="9">Carga modelos Ollama + sonido greeting</text>
+
+  <line x1="450" y1="54" x2="450" y2="85" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Box 2: Wait for trigger -->
+  <rect x="300" y="85" width="300" height="50" rx="8" fill="#1e293b" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="4,2"/>
+  <text x="450" y="107" text-anchor="middle" fill="#fbbf24" font-size="12" font-weight="600">detect_wake_word_or_ptt()</text>
+  <text x="450" y="123" text-anchor="middle" fill="#94a3b8" font-size="9">openwakeword escucha en 16kHz · PTT (Enter) · CLI (stdin)</text>
+
+  <line x1="450" y1="135" x2="450" y2="165" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Box 3: Wake detected -->
+  <rect x="330" y="165" width="240" height="44" rx="8" fill="#083344" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="450" y="185" text-anchor="middle" fill="#22d3ee" font-size="12">🎤 Wake word / PTT detectado</text>
+  <text x="450" y="200" text-anchor="middle" fill="#64748b" font-size="9">set_state(CORAZON) — cara de atención</text>
+
+  <line x1="450" y1="209" x2="450" y2="235" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Box 4: Record -->
+  <rect x="310" y="235" width="280" height="60" rx="8" fill="#1e293b" stroke="#34d399" stroke-width="1.5"/>
+  <text x="450" y="257" text-anchor="middle" fill="#34d399" font-size="12" font-weight="600">record_voice_adaptive() / record_voice_ptt()</text>
+  <text x="450" y="273" text-anchor="middle" fill="#94a3b8" font-size="9">Silencio 2s → corta · Máx 30s · Guarda a input.wav</text>
+  <text x="450" y="288" text-anchor="middle" fill="#64748b" font-size="9">Sonido ACK después de capturar</text>
+
+  <line x1="390" y1="295" x2="390" y2="325" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Box 5: Transcribe -->
+  <rect x="310" y="325" width="280" height="44" rx="8" fill="#1e293b" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="450" y="345" text-anchor="middle" fill="#a78bfa" font-size="12" font-weight="600">transcribe_audio() — whisper.cpp</text>
+  <text x="450" y="360" text-anchor="middle" fill="#94a3b8" font-size="9">whisper-cli ggml-base.en · 4 threads · inglés</text>
+
+  <line x1="450" y1="369" x2="450" y2="399" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Box 6: Chat -->
+  <rect x="300" y="399" width="300" height="55" rx="8" fill="#064e3b" stroke="#34d399" stroke-width="1.5"/>
+  <text x="450" y="419" text-anchor="middle" fill="#34d399" font-size="12" font-weight="600">chat_and_respond()</text>
+  <text x="450" y="435" text-anchor="middle" fill="#94a3b8" font-size="9">Ollama · model=gemma3:1b (texto) o llava (visión)</text>
+  <text x="450" y="450" text-anchor="middle" fill="#64748b" font-size="9">System prompt + memory + mensaje actual</text>
+
+  <line x1="450" y1="454" x2="450" y2="484" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Box 7: Response -->
+  <rect x="310" y="484" width="280" height="50" rx="8" fill="#083344" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="450" y="504" text-anchor="middle" fill="#22d3ee" font-size="12" font-weight="600">RESPUESTA</text>
+  <text x="450" y="519" text-anchor="middle" fill="#94a3b8" font-size="9">Si action → ejecuta herramienta</text>
+  <text x="450" y="534" text-anchor="middle" fill="#94a3b8" font-size="9">Si texto → TTS (Piper) + muestra en pantalla</text>
+
+  <line x1="450" y1="534" x2="450" y2="560" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Back to idle -->
+  <rect x="350" y="560" width="200" height="36" rx="18" fill="#1e293b" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="450" y="583" text-anchor="middle" fill="#94a3b8" font-size="10">↻ Vuelve a IDLE (esperar wake word)</text>
+</svg>
+<div class="tooltip">
+<b>Trigger sources:</b> Wake word openwakeword &gt; umbral 0.5 · PTT (Enter key) · stdin CLI<br>
+<b>Fallback:</b> Si no hay modelo wake word → solo PTT
+</div>
+</div>
+
+<!-- Diagram 2: State Machine -->
+<div class="diagram">
+<h2>🔄 2. Máquina de Estados</h2>
+<svg viewBox="0 0 900 450" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:900px">
+  <defs>
+    <marker id="arr2" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10" fill="#94a3b8"/></marker>
+  </defs>
+
+  <!-- WARMUP -->
+  <rect x="30" y="30" width="95" height="40" rx="6" fill="#083344" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="77" y="55" text-anchor="middle" fill="#22d3ee" font-size="10" font-weight="600">WARMUP</text>
+
+  <!-- IDLE -->
+  <rect x="210" y="120" width="95" height="40" rx="6" fill="#1e293b" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="257" y="145" text-anchor="middle" fill="#fbbf24" font-size="10" font-weight="600">IDLE</text>
+
+  <!-- CORAZON -->
+  <rect x="390" y="30" width="95" height="40" rx="6" fill="#1e293b" stroke="#fb7185" stroke-width="1.5"/>
+  <text x="437" y="55" text-anchor="middle" fill="#fb7185" font-size="10" font-weight="600">CORAZON</text>
+
+  <!-- LISTENING -->
+  <rect x="550" y="120" width="95" height="40" rx="6" fill="#1e293b" stroke="#34d399" stroke-width="1.5"/>
+  <text x="597" y="145" text-anchor="middle" fill="#34d399" font-size="10" font-weight="600">LISTENING</text>
+
+  <!-- THINKING -->
+  <rect x="390" y="210" width="95" height="40" rx="6" fill="#1e293b" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="437" y="235" text-anchor="middle" fill="#a78bfa" font-size="10" font-weight="600">THINKING</text>
+
+  <!-- SPEAKING -->
+  <rect x="210" y="210" width="95" height="40" rx="6" fill="#064e3b" stroke="#34d399" stroke-width="1.5"/>
+  <text x="257" y="235" text-anchor="middle" fill="#34d399" font-size="10" font-weight="600">SPEAKING</text>
+
+  <!-- ERROR -->
+  <rect x="550" y="210" width="95" height="40" rx="6" fill="#881337" stroke="#fb7185" stroke-width="1.5"/>
+  <text x="597" y="235" text-anchor="middle" fill="#fb7185" font-size="10" font-weight="600">ERROR</text>
+
+  <!-- IDLE EMOTION faces -->
+  <rect x="30" y="120" width="140" height="40" rx="6" fill="#1e293b" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="100" y="138" text-anchor="middle" fill="#fbbf24" font-size="8">Emociones idle</text>
+  <text x="100" y="152" text-anchor="middle" fill="#94a3b8" font-size="7">feliz, enojado, corazon...</text>
+
+  <!-- Transitions -->
+  <line x1="125" y1="60" x2="277" y2="118" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr2)"/>
+  <text x="180" y="82" fill="#64748b" font-size="7">inicia</text>
+
+  <line x1="277" y1="160" x2="385" y2="56" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr2)"/>
+  <text x="320" y="82" fill="#94a3b8" font-size="7">wake word</text>
+
+  <line x1="437" y1="70" x2="570" y2="118" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr2)"/>
+  <text x="520" y="90" fill="#64748b" font-size="7">set_state(LISTENING)</text>
+
+  <!-- Wait, actually LISTENING is not a directly used state. Looking at the code, after wake word it goes to CORAZON then records. Let me adjust -->
+
+  <line x1="437" y1="70" x2="437" y2="208" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr2)"/>
+  <text x="445" y="140" fill="#64748b" font-size="7">audio capturado</text>
+
+  <line x1="437" y1="250" x2="260" y2="248" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr2)"/>
+  <text x="340" y="240" fill="#64748b" font-size="7">modo texto (TTS)</text>
+
+  <line x1="260" y1="250" x2="260" y2="162" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr2)"/>
+  <text x="195" y="200" fill="#64748b" font-size="7">termina TTS</text>
+
+  <line x1="437" y1="250" x2="595" y2="248" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr2)"/>
+  <text x="500" y="240" fill="#64748b" font-size="7">error</text>
+
+  <line x1="595" y1="250" x2="595" y2="162" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr2)"/>
+  <path d="M595,160 Q600,140 520,140" stroke="#94a3b8" stroke-width="1" fill="none" marker-end="url(#arr2)"/>
+
+  <!-- Emotion idle cycle -->
+  <path d="M170,140 Q190,100 210,140" stroke="#fbbf24" stroke-width="1" fill="none" stroke-dasharray="2,2" marker-end="url(#arr2)"/>
+
+  <!-- DORMIDO state within idle -->
+  <rect x="30" y="200" width="95" height="40" rx="6" fill="#1e293b" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="77" y="218" text-anchor="middle" fill="#94a3b8" font-size="9">DORMIDO</text>
+  <text x="77" y="232" text-anchor="middle" fill="#64748b" font-size="7">set_state(IDLE)</text>
+
+  <path d="M100,198 Q120,180 210,160" stroke="#94a3b8" stroke-width="1" fill="none" marker-end="url(#arr2)"/>
+</svg>
+<div class="tooltip">
+<b>Notas:</b> Al entrar a IDLE se muestra DORMIDO primero · Cada 20s en IDLE → cara emocional aleatoria por 4s · CORAZON no se usa para expresar emoción, es la reacción inmediata al wake word<br>
+<b>FPS animación:</b> IDLE/emociones = 500ms · SPEAKING = 50ms (frames aleatorios)
+</div>
+</div>
+
+<!-- Diagram 3: Decision Flow -->
+<div class="diagram">
+<h2>🧠 3. Flujo de Decisión (LLM → Acción)</h2>
+<svg viewBox="0 0 850 680" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:850px">
+  <defs>
+    <marker id="arr3" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10" fill="#94a3b8"/></marker>
+  </defs>
+
+  <!-- User text -->
+  <rect x="325" y="10" width="200" height="36" rx="18" fill="#1e293b" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="425" y="33" text-anchor="middle" fill="#22d3ee" font-size="11">💬 Texto del usuario</text>
+
+  <line x1="425" y1="46" x2="425" y2="76" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr3)"/>
+
+  <!-- Memory check -->
+  <rect x="300" y="76" width="250" height="36" rx="6" fill="#1e293b" stroke="#fbbf24" stroke-width="1"/>
+  <text x="425" y="99" text-anchor="middle" fill="#fbbf24" font-size="10">"forget everything" ?</text>
+
+  <line x1="425" y1="112" x2="425" y2="142" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr3)"/>
+
+  <!-- Ollama -->
+  <rect x="300" y="142" width="250" height="44" rx="8" fill="#064e3b" stroke="#34d399" stroke-width="1.5"/>
+  <text x="425" y="162" text-anchor="middle" fill="#34d399" font-size="11" font-weight="600">ollama.chat() stream</text>
+  <text x="425" y="178" text-anchor="middle" fill="#94a3b8" font-size="8">memory + system prompt + user msg</text>
+
+  <line x1="425" y1="186" x2="425" y2="216" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr3)"/>
+
+  <!-- Branch -->
+  <polygon points="425,216 445,236 425,256 405,236" fill="#1e293b" stroke="#fbbf24" stroke-width="1"/>
+  <text x="425" y="239" text-anchor="middle" fill="#fbbf24" font-size="7">JSON?</text>
+
+  <!-- Left: Action -->
+  <line x1="405" y1="236" x2="230" y2="236" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr3)"/>
+
+  <rect x="70" y="210" width="160" height="52" rx="6" fill="#083344" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="150" y="230" text-anchor="middle" fill="#22d3ee" font-size="10" font-weight="600">{"action": "..."}</text>
+  <text x="150" y="245" text-anchor="middle" fill="#94a3b8" font-size="8">Se extrae con regex</text>
+  <text x="150" y="256" text-anchor="middle" fill="#64748b" font-size="7">execute_action_and_get_result()</text>
+
+  <line x1="150" y1="262" x2="150" y2="295" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr3)"/>
+
+  <!-- Action router -->
+  <rect x="30" y="295" width="240" height="90" rx="6" fill="#1e293b" stroke="#fbbf24" stroke-width="1"/>
+  <text x="150" y="315" text-anchor="middle" fill="#fbbf24" font-size="10" font-weight="600">Action Router</text>
+  <text x="150" y="332" text-anchor="middle" fill="#94a3b8" font-size="8">get_time → hora actual</text>
+  <text x="150" y="347" text-anchor="middle" fill="#94a3b8" font-size="8">search_web → DuckDuckGo</text>
+  <text x="150" y="362" text-anchor="middle" fill="#94a3b8" font-size="8">capture_image → cámara</text>
+  <text x="150" y="377" text-anchor="middle" fill="#94a3b8" font-size="8">show_face → cambiar expresión</text>
+
+  <!-- Right: Text -->
+  <line x1="445" y1="236" x2="620" y2="236" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr3)"/>
+
+  <rect x="600" y="210" width="200" height="52" rx="6" fill="#064e3b" stroke="#34d399" stroke-width="1.5"/>
+  <text x="700" y="230" text-anchor="middle" fill="#34d399" font-size="10" font-weight="600">Texto normal</text>
+  <text x="700" y="247" text-anchor="middle" fill="#94a3b8" font-size="8">Chatea normalmente</text>
+  <text x="700" y="259" text-anchor="middle" fill="#94a3b8" font-size="8">Se acumula en sentence_buffer</text>
+
+  <line x1="700" y1="262" x2="700" y2="295" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr3)"/>
+
+  <!-- TTS queue -->
+  <rect x="610" y="295" width="180" height="36" rx="6" fill="#1e293b" stroke="#fb7185" stroke-width="1"/>
+  <text x="700" y="310" text-anchor="middle" fill="#fb7185" font-size="10">. ! ? \n → TTS queue</text>
+  <text x="700" y="323" text-anchor="middle" fill="#64748b" font-size="7">tts_worker procesa con Piper</text>
+
+  <!-- Back to chat from actions -->
+  <line x1="150" y1="385" x2="700" y2="385" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr3)"/>
+  <text x="425" y="380" text-anchor="middle" fill="#64748b" font-size="7">show_face → inmediato</text>
+
+  <!-- Capture image loopback -->
+  <path d="M150,390 Q230,440 300,440 Q400,440 425,380" stroke="#22d3ee" stroke-width="1" fill="none" stroke-dasharray="3,2" marker-end="url(#arr3)"/>
+  <text x="300" y="435" text-anchor="middle" fill="#22d3ee" font-size="7">capture_image → chat_and_respond() con img</text>
+
+  <!-- search results -->
+  <line x1="150" y1="385" x2="150" y2="440" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr3)"/>
+  <rect x="20" y="440" width="260" height="55" rx="6" fill="#1e293b" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="150" y="458" text-anchor="middle" fill="#fbbf24" font-size="9">Resultado de búsqueda</text>
+  <text x="150" y="473" text-anchor="middle" fill="#94a3b8" font-size="8">→ summary_prompt → Ollama</text>
+  <text x="150" y="488" text-anchor="middle" fill="#94a3b8" font-size="8">→ TTS + memory</text>
+
+  <line x1="260" y1="470" x2="610" y2="330" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,2" marker-end="url(#arr3)"/>
+
+  <!-- Save to memory -->
+  <rect x="610" y="360" width="200" height="36" rx="6" fill="#1e293b" stroke="#a78bfa" stroke-width="1"/>
+  <text x="710" y="375" text-anchor="middle" fill="#a78bfa" font-size="9">session_memory.append()</text>
+  <text x="710" y="388" text-anchor="middle" fill="#64748b" font-size="7">{"role":"assistant"}</text>
+
+  <line x1="700" y1="331" x2="710" y2="358" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr3)"/>
+
+  <!-- Back to idle -->
+  <rect x="610" y="420" width="200" height="36" rx="18" fill="#1e293b" stroke="#94a3b8" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="710" y="440" text-anchor="middle" fill="#94a3b8" font-size="9">↻ Vuelve a IDLE</text>
+  <line x1="710" y1="396" x2="710" y2="418" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr3)"/>
+
+  <!-- Labels -->
+  <text x="425" y="490" text-anchor="middle" fill="#64748b" font-size="8">Interrupción: Barra espaciadora → interrumpe TTS y estado</text>
+</svg>
+<div class="tooltip">
+<b>Detección de acción:</b> El LLM output contiene <code>{</code> o <code>"action":</code> → modo acción · Si no → modo charla<br>
+<b>Tool aliases:</b> "google", "browser" → search_web · "look", "see" → capture_image · "cara", "emotion" → show_face<br>
+<b>Fallback:</b> Si la acción no es válida y el value tiene >1 palabra → CHAT_FALLBACK (lo trata como texto)
+</div>
+</div>
+
+<!-- Diagram 4: Audio Pipeline -->
+<div class="diagram">
+<h2>🎵 4. Pipeline de Audio</h2>
+<svg viewBox="0 0 850 250" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:850px">
+  <defs>
+    <marker id="arr4" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10" fill="#94a3b8"/></marker>
+  </defs>
+
+  <!-- Input -->
+  <rect x="20" y="30" width="140" height="50" rx="6" fill="#083344" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="90" y="50" text-anchor="middle" fill="#22d3ee" font-size="10" font-weight="600">🎤 Micrófono</text>
+  <text x="90" y="65" text-anchor="middle" fill="#94a3b8" font-size="7">CAM 313 USB</text>
+
+  <line x1="160" y1="55" x2="195" y2="55" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr4)"/>
+
+  <!-- SoundDevice -->
+  <rect x="195" y="5" width="130" height="50" rx="6" fill="#1e293b" stroke="#34d399" stroke-width="1.5"/>
+  <text x="260" y="25" text-anchor="middle" fill="#34d399" font-size="9" font-weight="600">sounddevice</text>
+  <text x="260" y="40" text-anchor="middle" fill="#94a3b8" font-size="7">InputStream 16kHz/48kHz</text>
+
+  <line x1="325" y1="30" x2="375" y2="30" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr4)"/>
+  <line x1="325" y1="55" x2="375" y2="55" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr4)"/>
+
+  <!-- Wake word -->
+  <rect x="375" y="5" width="140" height="50" rx="6" fill="#1e293b" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="445" y="25" text-anchor="middle" fill="#fbbf24" font-size="9" font-weight="600">openwakeword</text>
+  <text x="445" y="40" text-anchor="middle" fill="#94a3b8" font-size="7">"Hey BMO" · ONNX</text>
+
+  <!-- Recording -->
+  <rect x="375" y="80" width="140" height="50" rx="6" fill="#1e293b" stroke="#34d399" stroke-width="1.5"/>
+  <text x="445" y="100" text-anchor="middle" fill="#34d399" font-size="9" font-weight="600">Grabación</text>
+  <text x="445" y="115" text-anchor="middle" fill="#94a3b8" font-size="7">silence_threshold=0.02</text>
+
+  <line x1="515" y1="55" x2="515" y2="105" stroke="#94a3b8" stroke-width="1" marker-end="url(#arr4)"/>
+
+  <!-- Whisper -->
+  <rect x="545" y="80" width="130" height="50" rx="6" fill="#1e293b" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="610" y="100" text-anchor="middle" fill="#a78bfa" font-size="9" font-weight="600">whisper.cpp</text>
+  <text x="610" y="115" text-anchor="middle" fill="#94a3b8" font-size="7">ggml-base.en</text>
+
+  <line x1="675" y1="105" x2="715" y2="105" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr4)"/>
+
+  <!-- Output -->
+  <rect x="715" y="80" width="120" height="50" rx="6" fill="#064e3b" stroke="#34d399" stroke-width="1.5"/>
+  <text x="775" y="100" text-anchor="middle" fill="#34d399" font-size="9" font-weight="600">Piper TTS</text>
+  <text x="775" y="115" text-anchor="middle" fill="#94a3b8" font-size="7">aplay 3.5mm</text>
+
+  <!-- Labels -->
+  <text x="260" y="175" text-anchor="middle" fill="#64748b" font-size="8">Si openwakeword no está disponible → PTT (Enter) como fallback</text>
+  <text x="260" y="190" text-anchor="middle" fill="#64748b" font-size="8">Resampling por nearest-neighbor para evitar overflow en RPi</text>
+</svg>
+</div>
+
+<!-- Diagram 5: File Structure -->
+<div class="diagram">
+<h2>📁 5. Estructura del Proyecto</h2>
+<svg viewBox="0 0 850 280" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:850px">
+  <rect x="20" y="20" width="250" height="200" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="145" y="42" text-anchor="middle" fill="#22d3ee" font-size="10" font-weight="600">agente.py (1245 líneas)</text>
+  <text x="35" y="62" fill="#94a3b8" font-size="8">┣━ Config &amp; imports</text>
+  <text x="35" y="78" fill="#94a3b8" font-size="8">┣━ BotStates (estados)</text>
+  <text x="35" y="94" fill="#94a3b8" font-size="8">┣━ SYSTEM_PROMPT</text>
+  <text x="35" y="110" fill="#94a3b8" font-size="8">┣━ class BotGUI</text>
+  <text x="47" y="126" fill="#64748b" font-size="7">┣━ __init__ (TK, wake word, GUI)</text>
+  <text x="47" y="142" fill="#64748b" font-size="7">┣━ load_animations()</text>
+  <text x="47" y="158" fill="#64748b" font-size="7">┣━ Action Router</text>
+  <text x="47" y="174" fill="#64748b" font-size="7">┣━ Main Loop (safe_main_execution)</text>
+  <text x="47" y="190" fill="#64748b" font-size="7">┣━ chat_and_respond()</text>
+  <text x="47" y="206" fill="#64748b" font-size="7">┗━ Audio (record / transcribe / TTS)</text>
+
+  <rect x="300" y="20" width="250" height="200" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="425" y="42" text-anchor="middle" fill="#34d399" font-size="10" font-weight="600">Directorios clave</text>
+  <text x="315" y="62" fill="#94a3b8" font-size="8">┣━ faces/ — 29 expresiones</text>
+  <text x="327" y="78" fill="#64748b" font-size="7">┃  ┣━ idle/ listening/ thinking/</text>
+  <text x="327" y="94" fill="#64748b" font-size="7">┃  ┣━ speaking/ error/ capturing/</text>
+  <text x="327" y="110" fill="#64748b" font-size="7">┃  ┣━ blink/ corazon/ enojado/</text>
+  <text x="327" y="126" fill="#64748b" font-size="7">┃  ┣━ feliz/ shrek_cat/ antenas/</text>
+  <text x="327" y="142" fill="#64748b" font-size="7">┃  ┗━ ... +18 más</text>
+  <text x="315" y="162" fill="#94a3b8" font-size="8">┣━ sounds/ — greeting/ack/thinking/error</text>
+  <text x="315" y="182" fill="#94a3b8" font-size="8">┣━ whisper.cpp/ — STT</text>
+  <text x="315" y="202" fill="#94a3b8" font-size="8">┣━ config.yaml — configuración</text>
+  <text x="315" y="218" fill="#94a3b8" font-size="8">┗━ start.sh — script de inicio</text>
+
+  <rect x="580" y="20" width="250" height="200" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+  <text x="705" y="42" text-anchor="middle" fill="#fbbf24" font-size="10" font-weight="600">Servicios externos</text>
+  <text x="595" y="62" fill="#94a3b8" font-size="8">┣━ Ollama (gemma3:1b local)</text>
+  <text x="595" y="82" fill="#94a3b8" font-size="8">┣━ openwakeword (Hey BMO)</text>
+  <text x="595" y="102" fill="#94a3b8" font-size="8">┣━ Piper TTS + aplay</text>
+  <text x="595" y="122" fill="#94a3b8" font-size="8">┣━ whisper.cpp (STT)</text>
+  <text x="595" y="142" fill="#94a3b8" font-size="8">┣━ duckduckgo_search (web)</text>
+  <text x="595" y="162" fill="#94a3b8" font-size="8">┣━ rpicam-still / ffmpeg</text>
+  <text x="595" y="182" fill="#94a3b8" font-size="8">┣━ bmo-gallery.service (puerto 9090)</text>
+  <text x="595" y="202" fill="#94a3b8" font-size="8">┗━ disable-wifi-ps.service</text>
+</svg>
+</div>
+
+</body></html>
