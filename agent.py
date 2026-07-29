@@ -532,7 +532,7 @@ class BotGUI:
         value = action_data.get("value") or action_data.get("query")
         
         VALID_TOOLS = {
-            "get_time", "search_web", "capture_image", "show_face"
+            "get_time", "search_web", "capture_image", "show_face", "get_weather"
         }
         
         ALIASES = {
@@ -627,6 +627,32 @@ class BotGUI:
                 self.master.after(0, lambda s=target: self.set_state(s, f"Face: {target}"))
                 return f"FACE_CHANGED::{target}"
             return f"FACE_NOT_FOUND::caras disponibles: {', '.join(sorted(self.animations.keys()))}"
+
+        elif action == "get_weather":
+            city = (str(value or "").strip()) or "Santiago de Chile"
+            log(f"🌤️ Getting weather for: {city}")
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ["curl", "-s", f"wttr.in/{city}?format=%C+%t&lang=es"],
+                    capture_output=True, text=True, timeout=10
+                )
+                weather = result.stdout.strip()
+                if weather and "Unknown" not in weather:
+                    return f"WEATHER::{city}|{weather}"
+                else:
+                    # fallback: more verbose
+                    result = subprocess.run(
+                        ["curl", "-s", f"wttr.in/{city}?format=%C+%t+%w+%h&lang=es"],
+                        capture_output=True, text=True, timeout=10
+                    )
+                    weather = result.stdout.strip()
+                    if weather and "Unknown" not in weather:
+                        return f"WEATHER::{city}|{weather}"
+                    return f"WEATHER_UNAVAILABLE::{city}"
+            except Exception as e:
+                log(f"[WEATHER ERROR] {e}")
+                return f"WEATHER_UNAVAILABLE::{city}"
 
         return None
 
@@ -1061,6 +1087,15 @@ class BotGUI:
 
                     elif tool_result == "SEARCH_ERROR":
                         fallback_text = "I cannot reach the internet right now."
+                        self.thinking_sound_active.clear()
+                        self.set_state(BotStates.SPEAKING, "Speaking...", cam_path=img_path)
+                        self.append_to_text("BOT: ", newline=False)
+                        self.append_to_text(fallback_text, newline=True)
+                        with self.tts_queue_lock: self.tts_queue.append(fallback_text)
+
+                    elif tool_result and tool_result.startswith("WEATHER_UNAVAILABLE::"):
+                        city = tool_result.split("::", 1)[1]
+                        fallback_text = f"I could not get the weather for {city} right now."
                         self.thinking_sound_active.clear()
                         self.set_state(BotStates.SPEAKING, "Speaking...", cam_path=img_path)
                         self.append_to_text("BOT: ", newline=False)
