@@ -532,14 +532,16 @@ class BotGUI:
         value = action_data.get("value") or action_data.get("query")
         
         VALID_TOOLS = {
-            "get_time", "search_web", "capture_image", "show_face", "get_weather"
+            "get_time", "search_web", "capture_image", "show_face", "get_weather", "who_person"
         }
         
         ALIASES = {
             "google": "search_web", "browser": "search_web", "news": "search_web",         
             "search_news": "search_web", "look": "capture_image", "see": "capture_image", 
             "check_time": "get_time", "face": "show_face", "emotion": "show_face",
-            "cara": "show_face", "expresion": "show_face"
+            "cara": "show_face", "expresion": "show_face",
+            "who": "who_person", "whos": "who_person", "who_is": "who_person",
+            "quien": "who_person", "quien_es": "who_person"
         }
 
         action = ALIASES.get(raw_action, raw_action)
@@ -627,6 +629,23 @@ class BotGUI:
                 self.master.after(0, lambda s=target: self.set_state(s, f"Face: {target}"))
                 return f"FACE_CHANGED::{target}"
             return f"FACE_NOT_FOUND::caras disponibles: {', '.join(sorted(self.animations.keys()))}"
+
+        elif action == "who_person":
+            name = str(value or "").strip().lower()
+            log(f"👤 Who is: {name}")
+            people = {
+                "karina": "Karina Roncarolo is your JODIDITA Love 💕",
+                "bro": "Stephen is your bad bro 😎",
+                "stephen": "Stephen is your bad bro 😎",
+                "brenpoly": "Brenpoly is the creator of Be More Agent!",
+                "magno": "Magno Cardona — also known as acidfilez. Your friendly neighborhood coder.",
+                "mch": "That's you, boss!",
+            }
+            # Check if name contains any key
+            for key, response in people.items():
+                if key in name:
+                    return f"WHO_PERSON::{response}"
+            return f"WHO_PERSON::I don't know who {value or 'that'} is."
 
         elif action == "get_weather":
             city = (str(value or "").strip()) or "Santiago de Chile"
@@ -990,6 +1009,39 @@ class BotGUI:
     # =========================================================================
 
     def chat_and_respond(self, text, img_path=None):
+        # --- Pre-filter: "who is X" / "quien es X" -> bypass LLM for reliability ---
+        text_clean = text.strip().lower()
+        who_pats = [
+            r"(?:who(?:'s| is| was)|whos)\s+(.+?)",          # who is X, who's X
+            r"(?:quien es|quien)\s+(.+?)",                    # quien es X
+            r"do\s+you\s+know\s+who\s+(.+?)\s+is",          # do you know who X is
+            r"tell\s+me\s+about\s+(.+?)",                     # tell me about X
+            r"sabes\s+quien\s+es\s+(.+?)",                    # sabes quien es X
+            r"conoces\s+a\s+(.+?)",                           # conoces a X
+        ]
+        name = None
+        for pat in who_pats:
+            m = re.match(r"^" + pat + r"\??$", text_clean)
+            if m:
+                name = m.group(1).strip()
+                break
+        if name:
+            log(f"👤 WHO-IS pre-filter: '{name}'")
+            result = self.execute_action_and_get_result({"action": "who_person", "value": name})
+            if result and result.startswith("WHO_PERSON::"):
+                response = result.split("::", 1)[1]
+            else:
+                response = f"I don't know who {name} is."
+            self.thinking_sound_active.clear()
+            self.set_state(BotStates.SPEAKING, "Speaking...", cam_path=img_path)
+            self.append_to_text("BOT: ", newline=False)
+            self.append_to_text(response, newline=True)
+            with self.tts_queue_lock: self.tts_queue.append(response)
+            self.session_memory.append({"role": "assistant", "content": response})
+            self.wait_for_tts()
+            self._end_response(response)
+            return
+
         if "forget everything" in text.lower() or "reset memory" in text.lower():
             self.session_memory = []
             self.permanent_memory = [{"role": "system", "content": SYSTEM_PROMPT}]
