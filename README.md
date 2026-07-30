@@ -145,7 +145,8 @@ Todas las caras están en `faces/<nombre>/` y se cargan automáticamente con `lo
 | Cara | Frames | Descripción |
 |------|--------|-------------|
 | `blink` | 5 | Animación de parpadeo |
-| `corazon` | 1 | Ojos ❤️ enamorado |
+|| `antenas` | 5 | Robot con antenas, ondas de radio |
+|| `corazon` | 1 | Ojos ❤️ enamorado |
 | `enojado` | 1 | Enojado |
 | `feliz` | 1 | Feliz con sonrojo |
 | `shrek_cat` | 1 | El meme del gato de Shrek |
@@ -177,7 +178,7 @@ Todas las caras están en `faces/<nombre>/` y se cargan automáticamente con `lo
 "Pon cara de feliz"       → {"action": "show_face", "value": "feliz"}
 "Pon cara triste"         → {"action": "show_face", "value": "triste"}
 "Haz cara de sorpresa"    → {"action": "show_face", "value": "sorprendido"}
-"Muéstrame amor"          → {"action": "show_face", "value": "corazon"}
+"Muéstrame amor"          → {"action": "show_face", "value": "antenas"}
 ```
 
 ---

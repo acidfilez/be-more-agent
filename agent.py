@@ -172,7 +172,7 @@ class BotStates:
     WARMUP = "warmup"
     # Estados emocionales
     BLINK = "blink"
-    CORAZON = "corazon"
+    ANTENAS = "antenas"
     ENOJADO = "enojado"
     FELIZ = "feliz"
     SHREK_CAT = "shrek_cat"
@@ -230,9 +230,9 @@ User: Look surprised.
 You: {"action": "show_face", "value": "sorprendido"}
 
 User: Show me love.
-You: {"action": "show_face", "value": "corazon"}
+You: {"action": "show_face", "value": "antenas"}
 
-Available faces: idle, feliz, enojado, sorprendido, corazon, sospechoso, shrek_cat, antenas
+Available faces: idle, feliz, enojado, sorprendido, antenas, sospechoso, shrek_cat
 
 ### END EXAMPLES ###
 """
@@ -273,7 +273,7 @@ class BotGUI:
         self.current_overlay_image = None
         self.idle_emotion_timer = None
         self.idle_emotion_faces = [
-            "feliz", "enojado", "sorprendido", "corazon",
+            "feliz", "enojado", "sorprendido",
             "sospechoso", "shrek_cat", "blink", "antenas",
         ]
         
@@ -617,8 +617,8 @@ class BotGUI:
                 "sorprendido": BotStates.SORPRENDIDO, "surprised": BotStates.SORPRENDIDO,
                 "asustado": BotStates.ASUSTADO, "scared": BotStates.ASUSTADO, "miedo": BotStates.ASUSTADO,
                 "llorando": BotStates.LLORANDO, "crying": BotStates.LLORANDO, "llanto": BotStates.LLORANDO,
-                "beso": BotStates.BESO, "kiss": BotStates.BESO, "love": BotStates.CORAZON,
-                "corazon": BotStates.CORAZON, "heart": BotStates.CORAZON, "amor": BotStates.CORAZON,
+                "beso": BotStates.BESO, "kiss": BotStates.BESO, "love": BotStates.ANTENAS,
+                "corazon": BotStates.ANTENAS, "heart": BotStates.ANTENAS, "amor": BotStates.ANTENAS,
                 "guino": BotStates.GUINO, "wink": BotStates.GUINO,
                 "dormido": BotStates.DORMIDO, "sleep": BotStates.DORMIDO, "sleepy": BotStates.DORMIDO,
                 "confundido": BotStates.CONFUNDIDO, "confused": BotStates.CONFUNDIDO,
@@ -703,7 +703,7 @@ class BotGUI:
                     continue
 
                 log(f"🎤 Wake word detected! source={trigger_source}")
-                self.set_state(BotStates.CORAZON, "Hey! 👀")
+                self.set_state(BotStates.ANTENAS, "Hey! 👀")
                 
                 audio_file = None
                 if trigger_source == "PTT":
@@ -1221,7 +1221,7 @@ class BotGUI:
     def _end_response(self, response_text):
         """Log LLM response, show random end face, return to dormido."""
         log(f"🤖 LLM: \"{response_text[:200]}{'...' if len(response_text) > 200 else ''}\"")
-        end_faces = ["feliz", "sonrisa", "guino", "beso", "fiesta", "risueno", "corazon"]
+        end_faces = ["feliz", "sonrisa", "guino", "beso", "fiesta", "risueno", "antenas"]
         candidates = [f for f in end_faces if f in self.animations]
         end_face = random.choice(candidates) if candidates else BotStates.DORMIDO
         self.set_state(end_face, "Done!")
