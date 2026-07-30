@@ -23,4 +23,4 @@ echo ""
 # There's already a Wayland+Xwayland desktop running on :0
 # Just launch the agent with DISPLAY set
 export DISPLAY=:0
-exec ./venv/bin/python agent.py 2>&1
+exec ./venv/bin/python agent.py >> bmo.log 2>&1

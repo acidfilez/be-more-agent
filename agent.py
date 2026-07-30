@@ -808,10 +808,14 @@ class BotGUI:
                         self.ptt_event.clear()
                         raise StopIteration("PTT")
 
-                    rlist, _, _ = select.select([sys.stdin], [], [], 0.001)
-                    if rlist: 
-                        sys.stdin.readline()
-                        raise StopIteration("CLI")
+                    # Solo checkear stdin si es una terminal real
+                    # Si no (labwc autostart, systemd, /dev/null), select()
+                    # devuelve inmediatamente causando falsos CLI triggers.
+                    if sys.stdin.isatty():
+                        rlist, _, _ = select.select([sys.stdin], [], [], 0.001)
+                        if rlist: 
+                            sys.stdin.readline()
+                            raise StopIteration("CLI")
 
                     # If fallback mode (blocksize 0), read fixed amount
                     read_size = input_chunk_size
