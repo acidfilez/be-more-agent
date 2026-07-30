@@ -192,6 +192,7 @@ class BotStates:
     HAMBRE = "hambre"
     RISUENO = "risueno"
     BOSTEZO = "bostezo"
+    CAMERA = "camera"
 
 # --- SYSTEM PROMPT ---
 BASE_SYSTEM_PROMPT = """You are a helpful robot assistant running on a Raspberry Pi.
@@ -215,6 +216,9 @@ You: {"action": "search_web", "value": "robots news"}
 
 User: What do you see right now?
 You: {"action": "capture_image", "value": "environment"}
+
+User: Show me the camera / Show me what you see / Show camera
+You: {"action": "show_camera"}
 
 User: Put on a happy face!
 You: {"action": "show_face", "value": "feliz"}
@@ -457,7 +461,7 @@ class BotGUI:
                 self.current_state = state
                 self.current_frame_index = 0
             if msg: self.status_var.set(msg)
-            if cam_path and os.path.exists(cam_path) and state in [BotStates.THINKING, BotStates.SPEAKING]:
+            if cam_path and os.path.exists(cam_path) and state in [BotStates.THINKING, BotStates.SPEAKING, BotStates.CAMERA]:
                 try:
                     img = Image.open(cam_path).resize((self.OVERLAY_WIDTH, self.OVERLAY_HEIGHT))
                     self.current_overlay_image = ImageTk.PhotoImage(img)
@@ -532,7 +536,7 @@ class BotGUI:
         value = action_data.get("value") or action_data.get("query")
         
         VALID_TOOLS = {
-            "get_time", "search_web", "capture_image", "show_face", "get_weather", "who_person"
+            "get_time", "search_web", "capture_image", "show_camera", "show_face", "get_weather", "who_person"
         }
         
         ALIASES = {
@@ -541,7 +545,9 @@ class BotGUI:
             "check_time": "get_time", "face": "show_face", "emotion": "show_face",
             "cara": "show_face", "expresion": "show_face",
             "who": "who_person", "whos": "who_person", "who_is": "who_person",
-            "quien": "who_person", "quien_es": "who_person"
+            "quien": "who_person", "quien_es": "who_person",
+            "camera": "show_camera", "camara": "show_camera", "video": "show_camera",
+            "photo": "show_camera", "foto": "show_camera"
         }
 
         action = ALIASES.get(raw_action, raw_action)
@@ -595,6 +601,9 @@ class BotGUI:
         
         elif action == "capture_image":
              return "IMAGE_CAPTURE_TRIGGERED"
+
+        elif action == "show_camera":
+            return "SHOW_CAMERA_TRIGGERED"
 
         elif action == "show_face":
             face_name = str(value).lower().strip()
@@ -1128,7 +1137,23 @@ class BotGUI:
                         new_img_path = self.capture_image()
                         if new_img_path:
                             self.chat_and_respond(text, img_path=new_img_path)
-                            return 
+                            return
+
+                    if tool_result == "SHOW_CAMERA_TRIGGERED":
+                        new_img_path = self.capture_image()
+                        if new_img_path:
+                            # Mostrar imagen y quedarse en CAMERA hasta próximo wake word
+                            self.set_state(BotStates.CAMERA, "Camera mode", cam_path=new_img_path)
+                            self.thinking_sound_active.clear()
+                            self.set_state(BotStates.SPEAKING, "Looking...", cam_path=new_img_path)
+                            self.append_to_text("BOT: ", newline=False)
+                            msg = "Here's the camera view!"
+                            self.append_to_text(msg, newline=True)
+                            with self.tts_queue_lock: self.tts_queue.append(msg)
+                            self.wait_for_tts()
+                            # Volver a CAMERA para mantener imagen visible
+                            self.set_state(BotStates.CAMERA, "Camera mode", cam_path=new_img_path)
+                        return 
 
                     elif tool_result == "INVALID_ACTION":
                         fallback_text = "I am not sure how to do that."

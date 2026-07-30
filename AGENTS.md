@@ -1,5 +1,9 @@
 # Be More Agent — Project Context
 
+> **LANGUAGE: All code, comments, config, and documentation in this repo MUST be in ENGLISH.**
+> No Spanish in code, config descriptions, comments, or commit messages. This rule
+> applies to every file committed to the repo — including agent.py, config.json, etc.
+
 ## What is this?
 BrenPoly's **be-more-agent** running on a Raspberry Pi 5 (bmo) with DSI display (800x480), Ollama (gemma3:1b), Piper TTS. A BMO face assistant.
 
