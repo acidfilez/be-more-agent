@@ -16,7 +16,7 @@ Launches `agent.py` on DISPLAY=:0 (Wayland + Xwayland).
 ## Autostart (boot)
 - **labwc autostart**: `~/.config/labwc/autostart` — arranca `start.sh` cuando labwc (compositor Wayland + DSI) inicia la sesión gráfica.
 - Si el agente ya está corriendo, `pgrep` lo detecta y no lo duplica.
-- También hay un `bmo-api.service` (systemd user) que corre `/home/mch/.local/bin/bmo-api` — HTTP server en puerto 8080 para gestionar el agente (start/stop/restart) remotamente.
+- También hay un `bmo-api.service` (systemd user) que corre el script `bmo-api` del repo (vía symlink en `~/.local/bin/bmo-api` → `repo/bmo-api`) — HTTP server en puerto 8080 para gestionar el agente (start/stop/restart) remotamente.
 
 ## Gallery Server
 - **URL**: http://192.168.3.86:9090/bmo-faces-gallery.html

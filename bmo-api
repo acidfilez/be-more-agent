@@ -1,0 +1,406 @@
+#!/home/mch/Projects/be-more-agent/venv/bin/python3
+"""BMO Remote API — HTTP server for managing BMO agent & system.
+
+Endpoints (all return JSON envelope {ok, data, error}):
+
+  ## Legacy /api/* (kept for backward compatibility)
+  GET   /api/health           → health check
+  GET   /api/agent/status     → agent running/stopped + PID
+  POST  /api/agent/start      → start agent via start.sh
+  POST  /api/agent/stop       → stop agent gracefully (SIGTERM)
+  POST  /api/agent/restart    → stop + start
+  GET   /api/system/uptime    → uptime + CPU temp
+  POST  /api/system/shutdown  → power off
+  POST  /api/system/reboot    → reboot
+  GET   /api/ps               → relevant process list
+
+  ## New /bmo/* structure
+  GET   /bmo/                        → list all available endpoints
+  GET   /bmo/health                  → health check
+  GET   /bmo/agent/status            → agent running/stopped + PID
+  POST  /bmo/commands/start          → start agent
+  POST  /bmo/commands/stop           → stop agent
+  POST  /bmo/commands/restart        → restart agent
+  GET   /bmo/commands/status         → last command result
+  GET   /bmo/system/uptime           → uptime + CPU temp
+  POST  /bmo/system/shutdown         → power off
+  POST  /bmo/system/reboot           → reboot
+  GET   /bmo/system/processes        → relevant process list
+  GET   /bmo/system/info             → system info (hostname, kernel, etc.)
+"""
+
+import json
+import os
+import signal
+import subprocess
+import time
+import platform
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from pathlib import Path
+from datetime import datetime
+
+HOST = "0.0.0.0"
+PORT = 8080
+AGENT_DIR = str(Path.home() / "Projects" / "be-more-agent")
+AGENT_PATTERN = "be-more-agent.*agent.py"
+START_SCRIPT = os.path.join(AGENT_DIR, "start.sh")
+
+# ── helpers ──────────────────────────────────────────────────────────────
+
+
+def json_ok(data=None):
+    """Standard success envelope."""
+    return {"ok": True, "data": data or {}, "error": None}
+
+
+def json_err(message, status=400):
+    """Standard error envelope — caller sets HTTP status separately."""
+    return {"ok": False, "data": None, "error": message}, status
+
+
+def agent_pid():
+    """Return PID of running agent, or None.
+
+    Matches by:
+    1. pgrep pattern 'be-more-agent.*agent.py' (legacy, launched via wrapper)
+    2. python agent.py process running from the project directory
+    """
+    # Pattern 1: full-string match
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", AGENT_PATTERN],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            pids = [int(p) for p in result.stdout.strip().split()]
+            if pids:
+                return pids[0]
+    except (subprocess.TimeoutExpired, ValueError):
+        pass
+
+    # Pattern 2: python agent.py from the project directory
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", r"python.*agent\.py"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            for pid_str in result.stdout.strip().split():
+                try:
+                    pid = int(pid_str)
+                    cwd = os.readlink(f"/proc/{pid}/cwd")
+                    if cwd == AGENT_DIR:
+                        return pid
+                except (OSError, ValueError):
+                    continue
+    except (subprocess.TimeoutExpired, ValueError):
+        pass
+
+    return None
+
+
+def cpu_temp():
+    """Return CPU temp in °C, or None."""
+    try:
+        raw = Path("/sys/class/thermal/thermal_zone0/temp").read_text().strip()
+        return round(int(raw) / 1000, 1)
+    except (FileNotFoundError, ValueError, OSError):
+        return None
+
+
+def uptime_str():
+    """Return human-readable uptime string."""
+    try:
+        result = subprocess.run(
+            ["uptime", "-p"], capture_output=True, text=True, timeout=5,
+        )
+        return result.stdout.strip() if result.returncode == 0 else "unknown"
+    except subprocess.TimeoutExpired:
+        return "unknown"
+
+
+def run_cmd(cmd, timeout=15):
+    """Run a shell command, return (returncode, stdout, stderr)."""
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=timeout,
+        )
+        return result.returncode, result.stdout.strip(), result.stderr.strip()
+    except subprocess.TimeoutExpired:
+        return -1, "", "timeout"
+    except FileNotFoundError:
+        return -1, "", f"command not found: {cmd[0]}"
+
+
+# ── command registry ────────────────────────────────────────────────────
+
+_last_command = {"command": None, "result": None, "ts": None}
+
+ENDPOINTS = [
+    # (method, path, description)
+    ("GET",  "/bmo/",                "list all endpoints"),
+    ("GET",  "/bmo/health",          "health check"),
+    ("GET",  "/bmo/agent/status",    "agent running/stopped + PID"),
+    ("POST", "/bmo/commands/start",   "start agent"),
+    ("POST", "/bmo/commands/stop",    "stop agent"),
+    ("POST", "/bmo/commands/restart", "restart agent"),
+    ("GET",  "/bmo/commands/status",  "last command result"),
+    ("GET",  "/bmo/system/uptime",   "uptime + CPU temp"),
+    ("POST", "/bmo/system/shutdown", "power off"),
+    ("POST", "/bmo/system/reboot",   "reboot"),
+    ("GET",  "/bmo/system/processes","relevant process list"),
+    ("GET",  "/bmo/system/info",     "system info (hostname, kernel, etc.)"),
+]
+
+
+def record_command(name, result):
+    global _last_command
+    _last_command = {
+        "command": name,
+        "result": result,
+        "ts": datetime.now().isoformat(),
+    }
+
+
+# ── route definitions ───────────────────────────────────────────────────
+
+ROUTES = {}
+
+
+def route(methods, path):
+    """Decorator to register a handler for one or more methods + paths."""
+    methods = [methods] if isinstance(methods, str) else methods
+    paths = [path] if isinstance(path, str) else path
+    def wrapper(fn):
+        for m in methods:
+            for p in paths:
+                ROUTES.setdefault(m, {})[p] = fn
+        return fn
+    return wrapper
+
+
+# ── handlers ─────────────────────────────────────────────────────────────
+
+
+@route("GET", "/bmo/")
+def cmd_list_endpoints():
+    return json_ok({"endpoints": ENDPOINTS})
+
+
+@route("GET", ["/bmo/health", "/api/health"])
+def cmd_health():
+    return json_ok({"status": "ok", "hostname": "bmo", "port": PORT})
+
+
+@route("GET", ["/bmo/agent/status", "/api/agent/status"])
+def cmd_agent_status():
+    pid = agent_pid()
+    return json_ok({
+        "running": pid is not None,
+        "pid": pid,
+        "pattern": AGENT_PATTERN,
+    })
+
+
+@route("POST", ["/bmo/commands/start", "/api/agent/start"])
+def cmd_agent_start():
+    pid = agent_pid()
+    if pid is not None:
+        return json_ok({"status": "already_running", "pid": pid})
+
+    if not os.path.isfile(START_SCRIPT):
+        return json_err("start.sh not found", 500)
+
+    proc = subprocess.Popen(
+        [START_SCRIPT],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        cwd=AGENT_DIR,
+        env={**os.environ, "DISPLAY": ":0"},
+        start_new_session=True,
+    )
+    time.sleep(1)
+    new_pid = agent_pid()
+    result = {"status": "started" if new_pid else "launching",
+              "launch_pid": proc.pid, "agent_pid": new_pid}
+    record_command("start", result)
+    return json_ok(result)
+
+
+@route("POST", ["/bmo/commands/stop", "/api/agent/stop"])
+def cmd_agent_stop():
+    pid = agent_pid()
+    if pid is None:
+        return json_ok({"status": "not_running"})
+
+    rc, _, err = run_cmd(["pkill", "-f", AGENT_PATTERN])
+    if rc == 0:
+        time.sleep(1)
+        still_running = agent_pid()
+        result = {"status": "stopped", "pid": pid, "still_running": still_running}
+        record_command("stop", result)
+        return json_ok(result)
+    else:
+        return json_err(err or "stop failed", 500)
+
+
+@route("POST", ["/bmo/commands/restart", "/api/agent/restart"])
+def cmd_agent_restart():
+    old_pid = agent_pid()
+    if old_pid is not None:
+        run_cmd(["pkill", "-f", AGENT_PATTERN])
+        time.sleep(1.5)
+
+    if not os.path.isfile(START_SCRIPT):
+        return json_err("start.sh not found", 500)
+
+    proc = subprocess.Popen(
+        [START_SCRIPT],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        cwd=AGENT_DIR,
+        env={**os.environ, "DISPLAY": ":0"},
+        start_new_session=True,
+    )
+    time.sleep(1)
+    new_pid = agent_pid()
+    result = {"status": "restarted", "old_pid": old_pid, "new_pid": new_pid}
+    record_command("restart", result)
+    return json_ok(result)
+
+
+@route("GET", "/bmo/commands/status")
+def cmd_last_command():
+    return json_ok(_last_command)
+
+
+@route("GET", ["/bmo/system/uptime", "/api/system/uptime"])
+def cmd_uptime():
+    return json_ok({"uptime": uptime_str(), "cpu_temp_c": cpu_temp()})
+
+
+@route("POST", ["/bmo/system/shutdown", "/api/system/shutdown"])
+def cmd_shutdown():
+    result = {"status": "shutting_down"}
+    record_command("shutdown", result)
+    os.system("sudo /sbin/shutdown -h now")
+    return json_ok(result)
+
+
+@route("POST", ["/bmo/system/reboot", "/api/system/reboot"])
+def cmd_reboot():
+    result = {"status": "rebooting"}
+    record_command("reboot", result)
+    os.system("sudo /sbin/reboot")
+    return json_ok(result)
+
+
+@route("GET", ["/bmo/system/processes", "/api/ps"])
+def cmd_ps():
+    rc, out, err = run_cmd(["ps", "aux", "--sort=-%mem"])
+    if rc != 0:
+        return json_err(err or "ps failed", 500)
+
+    lines = out.split("\n")
+    header = lines[0] if lines else ""
+    relevant = [header]
+    keywords = ["agent", "python", "ollama", "labwc", "piper",
+                "wayland", "Xorg", "Xwayland", "pipewire",
+                "wireplumber", "kanshi"]
+    for line in lines[1:]:
+        if any(kw in line.lower() for kw in keywords):
+            relevant.append(line)
+
+    return json_ok({
+        "total_processes": len(lines) - 1,
+        "relevant_count": len(relevant) - 1,
+        "processes": relevant,
+    })
+
+
+@route("GET", "/bmo/system/info")
+def cmd_sysinfo():
+    info = {
+        "hostname": platform.node(),
+        "system": platform.system(),
+        "release": platform.release(),
+        "machine": platform.machine(),
+        "python": platform.python_version(),
+        "agent_dir": AGENT_DIR,
+    }
+    temp = cpu_temp()
+    if temp is not None:
+        info["cpu_temp_c"] = temp
+    return json_ok(info)
+
+
+# ── HTTP handler ─────────────────────────────────────────────────────────
+
+
+class BMOAPIHandler(BaseHTTPRequestHandler):
+    """HTTP request handler for BMO API."""
+
+    def _send(self, body, status=200):
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(json.dumps(body, indent=2).encode())
+        self.wfile.write(b"\n")
+
+    def _dispatch(self, method):
+        handler = ROUTES.get(method, {}).get(self.path)
+        if handler:
+            result = handler()
+            if isinstance(result, tuple):
+                body, status = result
+            else:
+                body, status = result, 200
+            self._send(body, status)
+        else:
+            # Check if the path exists under a different method
+            for m, paths in ROUTES.items():
+                if self.path in paths:
+                    self._send(
+                        {"ok": False, "data": None,
+                         "error": f"method {method} not allowed, use {m}"},
+                        405,
+                    )
+                    return
+            self._send(
+                {"ok": False, "data": None,
+                 "error": f"not found: {self.path}"},
+                404,
+            )
+
+    def log_message(self, format, *args):
+        print(f"[BMO API] {datetime.now().strftime('%H:%M:%S')} "
+              f"{args[0]} {args[1]} {args[2]}", flush=True)
+
+    def do_GET(self):
+        self._dispatch("GET")
+
+    def do_POST(self):
+        self._dispatch("POST")
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+
+def main():
+    print(f"[BMO API] Starting on {HOST}:{PORT}", flush=True)
+    print(f"[BMO API] {len(ROUTES['GET'])} GET + {len(ROUTES['POST'])} POST routes", flush=True)
+    server = HTTPServer((HOST, PORT), BMOAPIHandler)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\n[BMO API] Shutting down...", flush=True)
+        server.server_close()
+
+
+if __name__ == "__main__":
+    main()
