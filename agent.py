@@ -729,6 +729,11 @@ class BotGUI:
         except Exception as e:
             log(f"❌ Failed to load {TEXT_MODEL}: {e}")
         self.play_sound(self.get_random_sound(greeting_sounds_dir))
+        # Pequeña pausa + reset OWW para evitar falso trigger por ruido
+        # transiente del mic al abrir el InputStream por primera vez
+        if self.oww_model:
+            self.oww_model.reset()
+        time.sleep(0.5)
         log("✅ Models loaded, ready to go!")
 
     def detect_wake_word_or_ptt(self):
