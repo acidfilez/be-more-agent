@@ -256,7 +256,10 @@ class BotGUI:
     def __init__(self, master):
         self.master = master
         master.title("Pi Assistant")
-        master.attributes('-fullscreen', True)
+        # NOTE: fullscreen is applied by labwc window rule (rc.xml) on map.
+        # Setting '-fullscreen' here makes labwc treat the window as already
+        # fullscreen and its ToggleFullscreen rule un-fullscreens it instead.
+        master.geometry("800x480+0+0")
         master.config(cursor='none')
         master.bind('<Escape>', self.exit_fullscreen)
         
