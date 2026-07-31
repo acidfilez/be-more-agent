@@ -27,6 +27,10 @@ Endpoints (all return JSON envelope {ok, data, error}):
   POST  /bmo/system/reboot           → reboot
   GET   /bmo/system/processes        → relevant process list
   GET   /bmo/system/info             → system info (hostname, kernel, etc.)
+  GET   /bmo/system/backlight        → backlight state (brightness, max, on/off)
+  POST  /bmo/system/backlight/on     → set backlight to max brightness
+  POST  /bmo/system/backlight/off    → set backlight to 0 (screen off)
+  POST  /bmo/system/backlight/value  → set brightness, body/query {"value": 0-255}
 """
 
 import json
@@ -35,6 +39,8 @@ import signal
 import subprocess
 import time
 import platform
+import inspect
+from urllib.parse import parse_qs
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from datetime import datetime
@@ -150,6 +156,10 @@ ENDPOINTS = [
     ("POST", "/bmo/system/reboot",   "reboot"),
     ("GET",  "/bmo/system/processes","relevant process list"),
     ("GET",  "/bmo/system/info",     "system info (hostname, kernel, etc.)"),
+    ("GET",  "/bmo/system/backlight","backlight state (brightness, max, on/off)"),
+    ("POST", "/bmo/system/backlight/on",  "set backlight to max brightness"),
+    ("POST", "/bmo/system/backlight/off", "set backlight to 0 (screen off)"),
+    ("POST", "/bmo/system/backlight/value", "set brightness 0-255 (body or ?value=)"),
 ]
 
 
@@ -334,6 +344,106 @@ def cmd_sysinfo():
     return json_ok(info)
 
 
+# ── backlight handlers ───────────────────────────────────────────────────
+
+BACKLIGHT_DIR = "/sys/class/backlight"
+
+
+def backlight_path():
+    """Return path to the first backlight device, or None."""
+    try:
+        devices = sorted(os.listdir(BACKLIGHT_DIR))
+    except OSError:
+        return None
+    return os.path.join(BACKLIGHT_DIR, devices[0]) if devices else None
+
+
+def backlight_read(attr):
+    """Read a backlight sysfs attribute as int, or None."""
+    path = backlight_path()
+    if path is None:
+        return None
+    try:
+        return int(Path(path, attr).read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def backlight_write(value):
+    """Write brightness via sudo tee. Returns (returncode, error)."""
+    path = backlight_path()
+    if path is None:
+        return -1, "no backlight device found"
+    try:
+        proc = subprocess.run(
+            ["sudo", "tee", os.path.join(path, "brightness")],
+            input=f"{value}\n", capture_output=True, text=True, timeout=5,
+        )
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return -1, str(e)
+    if proc.returncode != 0:
+        return proc.returncode, proc.stderr.strip() or "write failed"
+    return 0, None
+
+
+@route("GET", "/bmo/system/backlight")
+def cmd_backlight():
+    brightness = backlight_read("brightness")
+    max_brightness = backlight_read("max_brightness")
+    if brightness is None:
+        return json_err("backlight not available", 500)
+    return json_ok({
+        "on": brightness > 0,
+        "brightness": brightness,
+        "max_brightness": max_brightness,
+        "device": backlight_path(),
+    })
+
+
+@route("POST", "/bmo/system/backlight/on")
+def cmd_backlight_on():
+    max_brightness = backlight_read("max_brightness")
+    if max_brightness is None:
+        return json_err("backlight not available", 500)
+    rc, err = backlight_write(max_brightness)
+    if rc != 0:
+        return json_err(f"failed to turn on backlight: {err}", 500)
+    record_command("backlight_on", {"brightness": max_brightness})
+    return json_ok({"on": True, "brightness": max_brightness})
+
+
+@route("POST", "/bmo/system/backlight/off")
+def cmd_backlight_off():
+    rc, err = backlight_write(0)
+    if rc != 0:
+        return json_err(f"failed to turn off backlight: {err}", 500)
+    record_command("backlight_off", {"brightness": 0})
+    return json_ok({"on": False, "brightness": 0})
+
+
+@route("POST", "/bmo/system/backlight/value")
+def cmd_backlight_value(req):
+    value = None
+    if req and req["body"] and "value" in req["body"]:
+        value = req["body"]["value"]
+    elif req and "value" in req["query"]:
+        value = req["query"]["value"]
+    if value is None:
+        return json_err("missing 'value' (0-255) in body or query string", 400)
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        return json_err("'value' must be an integer 0-255", 400)
+    max_brightness = backlight_read("max_brightness") or 255
+    if not (0 <= value <= max_brightness):
+        return json_err(f"'value' must be between 0 and {max_brightness}", 400)
+    rc, err = backlight_write(value)
+    if rc != 0:
+        return json_err(f"failed to set backlight: {err}", 500)
+    record_command("backlight_value", {"brightness": value})
+    return json_ok({"on": value > 0, "brightness": value})
+
+
 # ── HTTP handler ─────────────────────────────────────────────────────────
 
 
@@ -349,9 +459,30 @@ class BMOAPIHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"\n")
 
     def _dispatch(self, method):
+        # Split off query string (e.g. /bmo/system/backlight/value?value=128)
+        query = {}
+        if "?" in self.path:
+            path, _, qs = self.path.partition("?")
+            self.path = path
+            query = {k: v[0] for k, v in parse_qs(qs).items()}
+
+        # Parse JSON body for POST requests
+        body = None
+        if method == "POST":
+            length = int(self.headers.get("Content-Length") or 0)
+            if length > 0:
+                raw = self.rfile.read(length)
+                try:
+                    body = json.loads(raw)
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    body = None
+
         handler = ROUTES.get(method, {}).get(self.path)
         if handler:
-            result = handler()
+            if inspect.signature(handler).parameters:
+                result = handler({"query": query, "body": body})
+            else:
+                result = handler()
             if isinstance(result, tuple):
                 body, status = result
             else:
