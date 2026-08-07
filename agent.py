@@ -192,6 +192,7 @@ class BotStates:
     HAMBRE = "hambre"
     RISUENO = "risueno"
     BOSTEZO = "bostezo"
+    CORAZON = "corazon"
     CAMERA = "camera"
 
 # --- SYSTEM PROMPT ---
@@ -277,7 +278,7 @@ class BotGUI:
         self.idle_emotion_timer = None
         self.idle_emotion_faces = [
             "feliz", "enojado", "sorprendido",
-            "sospechoso", "shrek_cat", "blink", "antenas",
+            "sospechoso", "shrek_cat", "blink", "antenas", "corazon",
         ]
         self.pending_end_face = None  # set by who_person, applied after speaking
 
@@ -622,7 +623,7 @@ class BotGUI:
                 "asustado": BotStates.ASUSTADO, "scared": BotStates.ASUSTADO, "miedo": BotStates.ASUSTADO,
                 "llorando": BotStates.LLORANDO, "crying": BotStates.LLORANDO, "llanto": BotStates.LLORANDO,
                 "beso": BotStates.BESO, "kiss": BotStates.BESO, "love": BotStates.ANTENAS,
-                "corazon": BotStates.ANTENAS, "heart": BotStates.ANTENAS, "amor": BotStates.ANTENAS,
+                "corazon": BotStates.CORAZON, "heart": BotStates.ANTENAS, "amor": BotStates.ANTENAS,
                 "guino": BotStates.GUINO, "wink": BotStates.GUINO,
                 "dormido": BotStates.DORMIDO, "sleep": BotStates.DORMIDO, "sleepy": BotStates.DORMIDO,
                 "confundido": BotStates.CONFUNDIDO, "confused": BotStates.CONFUNDIDO,
@@ -647,7 +648,7 @@ class BotGUI:
             name = str(value or "").strip().lower()
             log(f"👤 Who is: {name}")
             people = {
-                "karina":   ("Karina Roncarolo is your JODIDITA Love 💕", BotStates.ANTENAS),
+                "karina":   ("Karina Roncarolo is your JODIDITA Love 💕", BotStates.CORAZON),
                 "bro":      ("Stephen is your bad bro 😎", BotStates.GUINO),
                 "stephen":  ("Stephen is your bad bro 😎", BotStates.GUINO),
                 "steven":   ("Stephen is your bad bro 😎", BotStates.GUINO),
@@ -1233,7 +1234,7 @@ class BotGUI:
             end_face = self.pending_end_face
             self.pending_end_face = None
         else:
-            end_faces = ["feliz", "sonrisa", "guino", "beso", "fiesta", "risueno", "antenas"]
+            end_faces = ["feliz", "sonrisa", "guino", "beso", "fiesta", "risueno", "antenas", "corazon"]
             candidates = [f for f in end_faces if f in self.animations]
             end_face = random.choice(candidates) if candidates else BotStates.DORMIDO
         self.set_state(end_face, "Done!")
