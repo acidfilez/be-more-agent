@@ -649,8 +649,12 @@ class BotGUI:
                 "karina": "Karina Roncarolo is your JODIDITA Love 💕",
                 "bro": "Stephen is your bad bro 😎",
                 "stephen": "Stephen is your bad bro 😎",
+                "steven": "Stephen is your bad bro 😎",
+                "steve": "Stephen is your bad bro 😎",
                 "brenpoly": "Brenpoly is the creator of Be More Agent!",
                 "magno": "Magno Cardona — also known as acidfilez. Your friendly neighborhood coder.",
+                "magnum": "Magno Cardona — also known as acidfilez. Your friendly neighborhood coder.",
+                "magnus": "Magno Cardona — also known as acidfilez. Your friendly neighborhood coder.",
                 "mch": "That's you, boss!",
             }
             # Check if name contains any key
