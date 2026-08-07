@@ -1240,7 +1240,12 @@ class BotGUI:
             end_face = random.choice(candidates) if candidates else BotStates.DORMIDO
             log(f"🎭 END FACE (random): {end_face}")
         self.set_state(end_face, "Done!")
-        self.master.after(5000, lambda: self.set_state(BotStates.IDLE, "Ready"))
+        # Block until display time elapses so main loop doesn't override the face
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            self.master.update()
+            time.sleep(0.05)
+        self.set_state(BotStates.IDLE, "Ready")
 
     def wait_for_tts(self):
         while self.tts_queue or self.tts_active.is_set():
