@@ -1238,7 +1238,7 @@ class BotGUI:
             candidates = [f for f in end_faces if f in self.animations]
             end_face = random.choice(candidates) if candidates else BotStates.DORMIDO
         self.set_state(end_face, "Done!")
-        self.master.after(2000, lambda: self.set_state(BotStates.IDLE, "Ready"))
+        self.master.after(5000, lambda: self.set_state(BotStates.IDLE, "Ready"))
 
     def wait_for_tts(self):
         while self.tts_queue or self.tts_active.is_set():
