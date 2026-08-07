@@ -64,27 +64,22 @@ def json_err(message, status=400):
     return {"ok": False, "data": None, "error": message}, status
 
 
-def agent_pid():
-    """Return PID of running agent, or None.
-
-    Matches by:
-    1. pgrep pattern 'be-more-agent.*agent.py' (legacy, launched via wrapper)
-    2. python agent.py process running from the project directory
-    """
-    # Pattern 1: full-string match
+def agent_pids():
+    """Return list of PIDs of running agent instances (may be >1)."""
+    pids = []
+    # Pattern 1: full cmdline match (legacy: launched via wrapper / abs path)
     try:
         result = subprocess.run(
             ["pgrep", "-f", AGENT_PATTERN],
             capture_output=True, text=True, timeout=5,
         )
         if result.returncode == 0:
-            pids = [int(p) for p in result.stdout.strip().split()]
-            if pids:
-                return pids[0]
+            pids += [int(p) for p in result.stdout.strip().split()]
     except (subprocess.TimeoutExpired, ValueError):
         pass
 
-    # Pattern 2: python agent.py from the project directory
+    # Pattern 2: python agent.py running from the project directory
+    # (how start.sh actually launches it: exec ./venv/bin/python agent.py)
     try:
         result = subprocess.run(
             ["pgrep", "-f", r"python.*agent\.py"],
@@ -94,15 +89,64 @@ def agent_pid():
             for pid_str in result.stdout.strip().split():
                 try:
                     pid = int(pid_str)
-                    cwd = os.readlink(f"/proc/{pid}/cwd")
-                    if cwd == AGENT_DIR:
-                        return pid
+                    if os.readlink(f"/proc/{pid}/cwd") == AGENT_DIR:
+                        pids.append(pid)
                 except (OSError, ValueError):
                     continue
     except (subprocess.TimeoutExpired, ValueError):
         pass
 
-    return None
+    # dedupe, keep order
+    seen = set()
+    return [p for p in pids if not (p in seen or seen.add(p))]
+
+
+def agent_pid():
+    """Return PID of running agent, or None."""
+    pids = agent_pids()
+    return pids[0] if pids else None
+
+
+def _pid_alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def kill_agent(timeout=5):
+    """Kill all agent instances: SIGTERM, then SIGKILL if still alive.
+
+    Returns (killed_pids, still_alive_pids).
+    """
+    pids = agent_pids()
+    if not pids:
+        return [], []
+
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        alive = [p for p in pids if _pid_alive(p)]
+        if not alive:
+            return pids, []
+        time.sleep(0.3)
+
+    # escalate to SIGKILL for stragglers
+    for pid in alive:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    time.sleep(0.5)
+    return pids, [p for p in alive if _pid_alive(p)]
 
 
 def cpu_temp():
@@ -229,8 +273,14 @@ def cmd_agent_start():
         env={**os.environ, "DISPLAY": ":0"},
         start_new_session=True,
     )
-    time.sleep(1)
-    new_pid = agent_pid()
+    # wait up to 8s for the agent to actually come up
+    new_pid = None
+    deadline = time.time() + 8
+    while time.time() < deadline:
+        new_pid = agent_pid()
+        if new_pid is not None:
+            break
+        time.sleep(0.5)
     result = {"status": "started" if new_pid else "launching",
               "launch_pid": proc.pid, "agent_pid": new_pid}
     record_command("start", result)
@@ -239,27 +289,33 @@ def cmd_agent_start():
 
 @route("POST", ["/bmo/commands/stop", "/api/agent/stop"])
 def cmd_agent_stop():
-    pid = agent_pid()
-    if pid is None:
+    pids = agent_pids()
+    if not pids:
         return json_ok({"status": "not_running"})
 
-    rc, _, err = run_cmd(["pkill", "-f", AGENT_PATTERN])
-    if rc == 0:
-        time.sleep(1)
-        still_running = agent_pid()
-        result = {"status": "stopped", "pid": pid, "still_running": still_running}
+    killed, still_alive = kill_agent()
+    if still_alive:
+        result = {"status": "stop_failed", "pid": pids,
+                  "still_running": still_alive}
         record_command("stop", result)
-        return json_ok(result)
-    else:
-        return json_err(err or "stop failed", 500)
+        return json_err(result, 500)
+
+    result = {"status": "stopped",
+              "pid": pids[0] if len(pids) == 1 else pids}
+    record_command("stop", result)
+    return json_ok(result)
 
 
 @route("POST", ["/bmo/commands/restart", "/api/agent/restart"])
 def cmd_agent_restart():
-    old_pid = agent_pid()
-    if old_pid is not None:
-        run_cmd(["pkill", "-f", AGENT_PATTERN])
-        time.sleep(1.5)
+    old_pids = agent_pids()
+    if old_pids:
+        killed, still_alive = kill_agent()
+        if still_alive:
+            result = {"status": "restart_failed_stop", "old_pid": old_pids,
+                      "still_running": still_alive}
+            record_command("restart", result)
+            return json_err(result, 500)
 
     if not os.path.isfile(START_SCRIPT):
         return json_err("start.sh not found", 500)
@@ -272,9 +328,20 @@ def cmd_agent_restart():
         env={**os.environ, "DISPLAY": ":0"},
         start_new_session=True,
     )
-    time.sleep(1)
-    new_pid = agent_pid()
-    result = {"status": "restarted", "old_pid": old_pid, "new_pid": new_pid}
+    # wait up to 8s for the agent to come up (start.sh may boot ollama first)
+    new_pid = None
+    deadline = time.time() + 8
+    while time.time() < deadline:
+        new_pid = agent_pid()
+        if new_pid is not None:
+            break
+        time.sleep(0.5)
+    result = {
+        "status": "restarted" if new_pid else "restart_failed_start",
+        "old_pid": old_pids[0] if len(old_pids) == 1 else old_pids,
+        "new_pid": new_pid,
+        "launch_pid": proc.pid,
+    }
     record_command("restart", result)
     return json_ok(result)
 
