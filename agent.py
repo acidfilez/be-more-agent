@@ -1232,11 +1232,13 @@ class BotGUI:
         log(f"🤖 LLM: \"{response_text[:200]}{'...' if len(response_text) > 200 else ''}\"")
         if self.pending_end_face and self.pending_end_face in self.animations:
             end_face = self.pending_end_face
+            log(f"🎭 END FACE (who): {end_face}")
             self.pending_end_face = None
         else:
             end_faces = ["feliz", "sonrisa", "guino", "beso", "fiesta", "risueno", "antenas", "corazon"]
             candidates = [f for f in end_faces if f in self.animations]
             end_face = random.choice(candidates) if candidates else BotStates.DORMIDO
+            log(f"🎭 END FACE (random): {end_face}")
         self.set_state(end_face, "Done!")
         self.master.after(5000, lambda: self.set_state(BotStates.IDLE, "Ready"))
 
