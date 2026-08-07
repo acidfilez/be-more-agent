@@ -1,0 +1,36 @@
+"""Bot state constants for Be More Agent."""
+
+
+class BotStates:
+    # Operational states
+    IDLE = "idle"
+    LISTENING = "listening"
+    THINKING = "thinking"
+    SPEAKING = "speaking"
+    ERROR = "error"
+    CAPTURING = "capturing"
+    WARMUP = "warmup"
+
+    # Emotional states
+    BLINK = "blink"
+    ANTENAS = "antenas"
+    ENOJADO = "enojado"
+    FELIZ = "feliz"
+    SHREK_CAT = "shrek_cat"
+    SORPRENDIDO = "sorprendido"
+    SOSPECHOSO = "sospechoso"
+    TRISTE = "triste"
+    GUINO = "guino"
+    FIESTA = "fiesta"
+    BESO = "beso"
+    DORMIDO = "dormido"
+    CONFUNDIDO = "confundido"
+    ASUSTADO = "asustado"
+    LLORANDO = "llorando"
+    SONRISA = "sonrisa"
+    FRIO = "frio"
+    TIMIDO = "timido"
+    HAMBRE = "hambre"
+    RISUENO = "risueno"
+    BOSTEZO = "bostezo"
+    CAMERA = "camera"

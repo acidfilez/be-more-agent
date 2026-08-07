@@ -1,0 +1,29 @@
+"""Chat history persistence for Be More Agent."""
+import json
+import os
+import logging
+
+from config import MEMORY_FILE
+from system_prompt import get_system_prompt
+
+logger = logging.getLogger(__name__)
+
+
+def load_chat_history(extras=""):
+    system_prompt = get_system_prompt(extras)
+    if os.path.exists(MEMORY_FILE):
+        try:
+            with open(MEMORY_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return [{"role": "system", "content": system_prompt}]
+
+
+def save_chat_history(permanent_memory, session_memory):
+    full = permanent_memory + session_memory
+    conv = full[1:]
+    if len(conv) > 10:
+        conv = conv[-10:]
+    with open(MEMORY_FILE, "w") as f:
+        json.dump([full[0]] + conv, f, indent=4)
