@@ -649,6 +649,7 @@ class BotGUI:
             log(f"👤 Who is: {name}")
             people = {
                 "karina":   ("Karina Roncarolo is your JODIDITA Love 💕", BotStates.CORAZON),
+                "eileen":   ("Eileen is my charming nephew 💕", BotStates.CORAZON),
                 "bro":      ("Stephen is your bad bro 😎", BotStates.GUINO),
                 "stephen":  ("Stephen is your bad bro 😎", BotStates.GUINO),
                 "steven":   ("Stephen is your bad bro 😎", BotStates.GUINO),
