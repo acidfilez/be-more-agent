@@ -279,7 +279,8 @@ class BotGUI:
             "feliz", "enojado", "sorprendido",
             "sospechoso", "shrek_cat", "blink", "antenas",
         ]
-        
+        self.pending_end_face = None  # set by who_person, applied after speaking
+
         self.permanent_memory = self.load_chat_history()
         self.session_memory = []
         self.thinking_sound_active = threading.Event()
@@ -646,20 +647,20 @@ class BotGUI:
             name = str(value or "").strip().lower()
             log(f"👤 Who is: {name}")
             people = {
-                "karina": "Karina Roncarolo is your JODIDITA Love 💕",
-                "bro": "Stephen is your bad bro 😎",
-                "stephen": "Stephen is your bad bro 😎",
-                "steven": "Stephen is your bad bro 😎",
-                "steve": "Stephen is your bad bro 😎",
-                "brenpoly": "Brenpoly is the creator of Be More Agent!",
-                "magno": "Magno Cardona — also known as acidfilez. Your friendly neighborhood coder.",
-                "magnum": "Magno Cardona — also known as acidfilez. Your friendly neighborhood coder.",
-                "magnus": "Magno Cardona — also known as acidfilez. Your friendly neighborhood coder.",
-                "mch": "That's you, boss!",
+                "karina":   ("Karina Roncarolo is your JODIDITA Love 💕", BotStates.ANTENAS),
+                "bro":      ("Stephen is your bad bro 😎", BotStates.GUINO),
+                "stephen":  ("Stephen is your bad bro 😎", BotStates.GUINO),
+                "steven":   ("Stephen is your bad bro 😎", BotStates.GUINO),
+                "steve":    ("Stephen is your bad bro 😎", BotStates.GUINO),
+                "brenpoly": ("Brenpoly is the creator of Be More Agent!", BotStates.FELIZ),
+                "magno":    ("Magno Cardona — also known as acidfilez. Your friendly neighborhood coder.", BotStates.SOSPECHOSO),
+                "magnum":   ("Magno Cardona — also known as acidfilez. Your friendly neighborhood coder.", BotStates.SOSPECHOSO),
+                "magnus":   ("Magno Cardona — also known as acidfilez. Your friendly neighborhood coder.", BotStates.SOSPECHOSO),
+                "mch":      ("That's you, boss!", BotStates.FELIZ),
             }
-            # Check if name contains any key
-            for key, response in people.items():
+            for key, (response, face) in people.items():
                 if key in name:
+                    self.pending_end_face = face  # deferred: apply after speaking
                     return f"WHO_PERSON::{response}"
             return f"WHO_PERSON::I don't know who {value or 'that'} is."
 
@@ -1226,11 +1227,15 @@ class BotGUI:
             self.set_state(BotStates.ERROR, "Brain Freeze!")
 
     def _end_response(self, response_text):
-        """Log LLM response, show random end face, return to dormido."""
+        """Log LLM response, show end face (respects pending_who_face), return to idle."""
         log(f"🤖 LLM: \"{response_text[:200]}{'...' if len(response_text) > 200 else ''}\"")
-        end_faces = ["feliz", "sonrisa", "guino", "beso", "fiesta", "risueno", "antenas"]
-        candidates = [f for f in end_faces if f in self.animations]
-        end_face = random.choice(candidates) if candidates else BotStates.DORMIDO
+        if self.pending_end_face and self.pending_end_face in self.animations:
+            end_face = self.pending_end_face
+            self.pending_end_face = None
+        else:
+            end_faces = ["feliz", "sonrisa", "guino", "beso", "fiesta", "risueno", "antenas"]
+            candidates = [f for f in end_faces if f in self.animations]
+            end_face = random.choice(candidates) if candidates else BotStates.DORMIDO
         self.set_state(end_face, "Done!")
         self.master.after(2000, lambda: self.set_state(BotStates.IDLE, "Ready"))
 
