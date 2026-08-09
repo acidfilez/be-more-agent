@@ -21,6 +21,7 @@ import os
 import subprocess
 import random
 import re
+import shlex
 import sys
 import select
 import traceback
@@ -234,6 +235,12 @@ User: Show me love.
 You: {"action": "show_face", "value": "antenas"}
 
 Available faces: idle, feliz, enojado, sorprendido, antenas, sospechoso, shrek_cat
+
+User: Turn on the Simba office light / Simba office light on
+You: {"action": "simba_office_light_on"}
+
+User: Turn off the Simba office light / Simba office light off
+You: {"action": "simba_office_light_off"}
 
 ### END EXAMPLES ###
 """
@@ -541,7 +548,8 @@ class BotGUI:
         value = action_data.get("value") or action_data.get("query")
         
         VALID_TOOLS = {
-            "get_time", "search_web", "capture_image", "show_camera", "show_face", "get_weather", "who_person"
+            "get_time", "search_web", "capture_image", "show_camera", "show_face", "get_weather", "who_person",
+            "simba_office_light_on", "simba_office_light_off"
         }
         
         ALIASES = {
@@ -552,7 +560,14 @@ class BotGUI:
             "who": "who_person", "whos": "who_person", "who_is": "who_person",
             "quien": "who_person", "quien_es": "who_person",
             "camera": "show_camera", "camara": "show_camera", "video": "show_camera",
-            "photo": "show_camera", "foto": "show_camera"
+            "photo": "show_camera", "foto": "show_camera",
+            # Simba Office Light
+            "simba_light_on": "simba_office_light_on",
+            "simba_light_off": "simba_office_light_off",
+            "simba_office_on": "simba_office_light_on",
+            "simba_office_off": "simba_office_light_off",
+            "simba_on": "simba_office_light_on",
+            "simba_off": "simba_office_light_off",
         }
 
         action = ALIASES.get(raw_action, raw_action)
@@ -691,6 +706,35 @@ class BotGUI:
             except Exception as e:
                 log(f"[WEATHER ERROR] {e}")
                 return f"WEATHER_UNAVAILABLE::{city}"
+
+        elif action in ("simba_office_light_on", "simba_office_light_off"):
+            target = "on" if action.endswith("_on") else "off"
+            command_es = "enciende la luz de simba office" if target == "on" else "apaga la luz de simba office"
+            log(f"💡 Simba Office Light → {target.upper()} (SSH to xero-ai)")
+            try:
+                result = subprocess.run(
+                    ["ssh", "-o", "ConnectTimeout=5",
+                     "-i", os.path.expanduser("~/.ssh/id_ed25519_fleet"),
+                     "mch@xero-ai.local",
+                     "~/.local/bin/hermes chat -q " + shlex.quote(command_es)],
+                    capture_output=True, text=True, timeout=90
+                )
+                # Extract the last meaningful line from Hermes output
+                output = result.stdout.strip()
+                if result.returncode != 0:
+                    log(f"[SIMBA] SSH failed (rc={result.returncode}): {result.stderr[:200]}")
+                    return f"SIMBA_LIGHT_ERROR::Could not reach xero-ai (exit code {result.returncode})"
+                log(f"[SIMBA] SSH OK, output: {output[-300:]}")
+                return f"SIMBA_LIGHT::{target.upper()} — command sent to xero-ai"
+            except subprocess.TimeoutExpired:
+                log("[SIMBA] SSH timed out")
+                return "SIMBA_LIGHT_ERROR::SSH to xero-ai timed out"
+            except FileNotFoundError:
+                log("[SIMBA] ssh command not found")
+                return "SIMBA_LIGHT_ERROR::SSH not available on this system"
+            except Exception as e:
+                log(f"[SIMBA] Unexpected error: {e}")
+                return f"SIMBA_LIGHT_ERROR::{str(e)[:100]}"
 
         return None
 
