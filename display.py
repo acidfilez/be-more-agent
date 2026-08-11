@@ -137,6 +137,10 @@ class DisplayManager:
         if self.current_state != state:
             self.current_state = state
             self.current_frame_index = 0
+            # Show first frame immediately (animation loop is blocked in _listen_loop)
+            frames = self.animations.get(self.current_state)
+            if frames:
+                self.background_label.config(image=frames[0])
         if msg:
             self.status_var.set(msg)
 
@@ -144,6 +148,9 @@ class DisplayManager:
         if state == BotStates.IDLE:
             self.current_state = BotStates.DORMIDO
             self.current_frame_index = 0
+            frames = self.animations.get(BotStates.DORMIDO)
+            if frames:
+                self.background_label.config(image=frames[0])
             self.master.after(50, self.update_animation)
 
         # Defer overlay/camera image handling
