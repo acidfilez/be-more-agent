@@ -33,13 +33,16 @@ class AudioManager:
     """Manages all audio I/O: wake word detection, recording, transcription,
     TTS output, and sound FX playback."""
 
-    def __init__(self, state_callback):
+    def __init__(self, state_callback, pump_callback=None):
         """
         Args:
             state_callback: callable(state, message, cam_path) to notify
                             the display/GUI of state changes.
+            pump_callback: optional callable() to pump the GUI event loop
+                           during blocking I/O (e.g. tkinter master.update).
         """
         self._state_cb = state_callback
+        self._pump_cb = pump_callback
 
         # Wake word
         self.oww_model = None
@@ -311,6 +314,7 @@ class AudioManager:
             logger.info(
                 f"Listening with rate {stream_args['samplerate']} "
                 f"and block {stream_args['blocksize']}")
+            tick = 0
             while True:
                 if self.ptt_event.is_set():
                     self.ptt_event.clear()
@@ -337,6 +341,11 @@ class AudioManager:
                 audio_data = np.frombuffer(data, dtype=np.int16)
                 if audio_data.ndim > 1:
                     audio_data = audio_data.flatten()
+
+                # Pump GUI event loop so animations/scheduled callbacks run
+                tick += 1
+                if self._pump_cb and tick % 10 == 0:
+                    self._pump_cb()
 
                 if use_resampling:
                     step = len(audio_data) / target_chunk_size

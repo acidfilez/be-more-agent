@@ -62,6 +62,7 @@ class BotGUI:
         # --- Audio ---
         self.audio = AudioManager(
             state_callback=self.display.set_state,
+            pump_callback=self.display.master.update,
         )
 
         # --- Actions ---
