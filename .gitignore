@@ -19,6 +19,7 @@ memory.json
 chat_memory.json
 # config.json
 whisper.cpp/
+faces_v1_backup/
 
 # --- Temporary/Generated Media ---
 *.wav
