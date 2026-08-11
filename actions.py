@@ -1,5 +1,7 @@
 """Action router: executes tool commands (time, search, face, weather, etc.)."""
 import datetime
+import os
+import shlex
 import subprocess
 import logging
 
@@ -10,6 +12,7 @@ logger = logging.getLogger(__name__)
 VALID_TOOLS = {
     "get_time", "search_web", "capture_image", "show_camera",
     "show_face", "get_weather", "who_person",
+    "simba_office_light_on", "simba_office_light_off",
 }
 
 ALIASES = {
@@ -22,6 +25,13 @@ ALIASES = {
     "quien": "who_person", "quien_es": "who_person",
     "camera": "show_camera", "camara": "show_camera", "video": "show_camera",
     "photo": "show_camera", "foto": "show_camera",
+    # Simba Office Light
+    "simba_light_on": "simba_office_light_on",
+    "simba_light_off": "simba_office_light_off",
+    "simba_office_on": "simba_office_light_on",
+    "simba_office_off": "simba_office_light_off",
+    "simba_on": "simba_office_light_on",
+    "simba_off": "simba_office_light_off",
 }
 
 FACE_MAP = {
@@ -40,7 +50,7 @@ FACE_MAP = {
     "llanto": BotStates.LLORANDO,
     "beso": BotStates.BESO, "kiss": BotStates.BESO,
     "love": BotStates.ANTENAS,
-    "corazon": BotStates.ANTENAS, "heart": BotStates.ANTENAS,
+    "corazon": BotStates.CORAZON, "heart": BotStates.ANTENAS,
     "amor": BotStates.ANTENAS,
     "guino": BotStates.GUINO, "wink": BotStates.GUINO,
     "dormido": BotStates.DORMIDO, "sleep": BotStates.DORMIDO,
@@ -68,7 +78,8 @@ FACE_MAP = {
 
 PEOPLE_DB = {
     "karina": ("Karina Roncarolo is your JODIDITA Love 💕",
-               BotStates.ANTENAS),
+               BotStates.CORAZON),
+    "eileen": ("Eileen is my charming nephew 💕", BotStates.CORAZON),
     "bro": ("Stephen is your bad bro 😎", BotStates.GUINO),
     "stephen": ("Stephen is your bad bro 😎", BotStates.GUINO),
     "steven": ("Stephen is your bad bro 😎", BotStates.GUINO),
@@ -129,6 +140,9 @@ class ActionRouter:
 
         elif action == "get_weather":
             return self._get_weather(value)
+
+        elif action in ("simba_office_light_on", "simba_office_light_off"):
+            return self._simba_light(action)
 
         return None
 
@@ -224,3 +238,39 @@ class ActionRouter:
         except Exception as e:
             logger.error(f"Weather error: {e}")
             return f"WEATHER_UNAVAILABLE::{city}"
+
+    @staticmethod
+    def _simba_light(action):
+        """SSH into xero-ai and run Hermes to toggle Simba Office light."""
+        target = "on" if action.endswith("_on") else "off"
+        command_es = (
+            "enciende la luz de simba office" if target == "on"
+            else "apaga la luz de simba office"
+        )
+        logger.info(f"Simba Office Light → {target.upper()} (SSH to xero-ai)")
+        try:
+            result = subprocess.run(
+                ["ssh", "-o", "ConnectTimeout=5",
+                 "-i", os.path.expanduser("~/.ssh/id_ed25519_fleet"),
+                 "mch@xero-ai.local",
+                 "~/.local/bin/hermes chat -q " + shlex.quote(command_es)],
+                capture_output=True, text=True, timeout=90
+            )
+            output = result.stdout.strip()
+            if result.returncode != 0:
+                logger.error(
+                    f"Simba SSH failed (rc={result.returncode}): "
+                    f"{result.stderr[:200]}")
+                return (f"SIMBA_LIGHT_ERROR::Could not reach xero-ai "
+                        f"(exit code {result.returncode})")
+            logger.info(f"Simba SSH OK, output: {output[-300:]}")
+            return f"SIMBA_LIGHT::{target.upper()} — command sent to xero-ai"
+        except subprocess.TimeoutExpired:
+            logger.error("Simba SSH timed out")
+            return "SIMBA_LIGHT_ERROR::SSH to xero-ai timed out"
+        except FileNotFoundError:
+            logger.error("Simba: ssh command not found")
+            return "SIMBA_LIGHT_ERROR::SSH not available on this system"
+        except Exception as e:
+            logger.error(f"Simba unexpected error: {e}")
+            return f"SIMBA_LIGHT_ERROR::{str(e)[:100]}"

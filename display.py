@@ -33,7 +33,7 @@ class DisplayManager:
         self.idle_emotion_timer = None
         self.idle_emotion_faces = [
             "feliz", "enojado", "sorprendido",
-            "sospechoso", "shrek_cat", "blink", "antenas",
+            "sospechoso", "shrek_cat", "blink", "antenas", "corazon",
         ]
 
         # GUI widgets

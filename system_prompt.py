@@ -39,6 +39,12 @@ You: {"action": "show_face", "value": "antenas"}
 
 Available faces: idle, feliz, enojado, sorprendido, antenas, sospechoso, shrek_cat
 
+User: Turn on the Simba office light / Simba office light on
+You: {"action": "simba_office_light_on"}
+
+User: Turn off the Simba office light / Simba office light off
+You: {"action": "simba_office_light_off"}
+
 ### END EXAMPLES ###
 """
 

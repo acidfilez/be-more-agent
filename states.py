@@ -33,4 +33,5 @@ class BotStates:
     HAMBRE = "hambre"
     RISUENO = "risueno"
     BOSTEZO = "bostezo"
+    CORAZON = "corazon"
     CAMERA = "camera"

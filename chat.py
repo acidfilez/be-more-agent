@@ -2,6 +2,7 @@
 import threading
 import re
 import random
+import time
 import logging
 
 import ollama
@@ -274,16 +275,22 @@ class ChatPipeline:
         if (self.actions.pending_end_face
                 and self.actions.pending_end_face in self.display.animations):
             end_face = self.actions.pending_end_face
+            logger.info(f"END FACE (who): {end_face}")
             self.actions.pending_end_face = None
         else:
-            candidates = [f for f in [
-                "feliz", "sonrisa", "guino", "beso", "fiesta",
-                "risueno", "antenas"] if f in self.display.animations]
+            end_faces = ["feliz", "sonrisa", "guino", "beso", "fiesta",
+                         "risueno", "antenas", "corazon"]
+            candidates = [f for f in end_faces if f in self.display.animations]
             end_face = random.choice(candidates) if candidates else BotStates.DORMIDO
+            logger.info(f"END FACE (random): {end_face}")
 
         self.display.set_state(end_face, "Done!")
-        self.display.master.after(
-            2000, lambda: self.display.set_state(BotStates.IDLE, "Ready"))
+        # Block until display time elapses so main loop doesn't override the face
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            self.display.master.update()
+            time.sleep(0.05)
+        self.display.set_state(BotStates.IDLE, "Ready")
 
     @staticmethod
     def _extract_json(text):
