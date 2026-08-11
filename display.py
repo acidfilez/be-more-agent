@@ -141,6 +141,9 @@ class DisplayManager:
             frames = self.animations.get(self.current_state)
             if frames:
                 self.background_label.config(image=frames[0])
+                logger.info(f"DISPLAY: showing {self.current_state} frame 0/{len(frames)}")
+            else:
+                logger.warning(f"DISPLAY: no frames for {self.current_state}, anim keys={list(self.animations.keys())[:5]}...")
         if msg:
             self.status_var.set(msg)
 
@@ -152,6 +155,7 @@ class DisplayManager:
             if frames:
                 self.background_label.config(image=frames[0])
             self.master.after(50, self.update_animation)
+            logger.info(f"DISPLAY: DORMIDO override, frame 0/{len(frames) if frames else 'none'}")
 
         # Defer overlay/camera image handling
         def _update_overlay():
