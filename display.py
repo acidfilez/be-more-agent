@@ -131,15 +131,23 @@ class DisplayManager:
                 pass
             self.idle_emotion_timer = None
 
-        def _update():
-            if msg:
-                logger.info(f"STATE → {state.upper()}: {msg}")
-            if self.current_state != state:
-                self.current_state = state
-                self.current_frame_index = 0
-            if msg:
-                self.status_var.set(msg)
+        # Update state synchronously so animation loop picks it up immediately
+        if msg:
+            logger.info(f"STATE → {state.upper()}: {msg}")
+        if self.current_state != state:
+            self.current_state = state
+            self.current_frame_index = 0
+        if msg:
+            self.status_var.set(msg)
 
+        # IDLE → DORMIDO (sleeping face)
+        if state == BotStates.IDLE:
+            self.current_state = BotStates.DORMIDO
+            self.current_frame_index = 0
+            self.master.after(50, self.update_animation)
+
+        # Defer overlay/camera image handling
+        def _update_overlay():
             if (cam_path and os.path.exists(cam_path)
                     and state in [BotStates.THINKING, BotStates.SPEAKING,
                                   BotStates.CAMERA]):
@@ -155,13 +163,7 @@ class DisplayManager:
             else:
                 self.overlay_label.place_forget()
 
-            # Show dormido when entering IDLE
-            if state == BotStates.IDLE:
-                self.current_state = BotStates.DORMIDO
-                self.current_frame_index = 0
-                self.master.after(50, self.update_animation)
-
-        self.master.after(0, _update)
+        self.master.after(0, _update_overlay)
 
     def schedule_idle_emotion(self):
         """After 20s of idle, show a random emotion for 4s."""
