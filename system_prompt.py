@@ -45,6 +45,12 @@ You: {"action": "simba_office_light_on"}
 User: Turn off the Simba office light / Simba office light off
 You: {"action": "simba_office_light_off"}
 
+User: Lights off / Turn off the lights
+You: {"action": "lights_off"}
+
+User: Lights on / Turn on the lights
+You: {"action": "lights_on"}
+
 ### END EXAMPLES ###
 """
 

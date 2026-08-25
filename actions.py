@@ -1,8 +1,9 @@
 """Action router: executes tool commands (time, search, face, weather, etc.)."""
 import datetime
+import json
 import os
-import shlex
 import subprocess
+import time
 import logging
 
 from states import BotStates
@@ -13,6 +14,7 @@ VALID_TOOLS = {
     "get_time", "search_web", "capture_image", "show_camera",
     "show_face", "get_weather", "who_person",
     "simba_office_light_on", "simba_office_light_off",
+    "lights_on", "lights_off",
 }
 
 ALIASES = {
@@ -32,6 +34,10 @@ ALIASES = {
     "simba_office_off": "simba_office_light_off",
     "simba_on": "simba_office_light_on",
     "simba_off": "simba_office_light_off",
+    # Lights (Home Assistant)
+    "luces_on": "lights_on", "luces_off": "lights_off",
+    "apagar_luces": "lights_off", "encender_luces": "lights_on",
+    "luces_apaga": "lights_off", "luces_enciende": "lights_on",
 }
 
 FACE_MAP = {
@@ -112,6 +118,51 @@ PEOPLE_DB = {
 }
 
 
+# ── Home Assistant (xero-ai) ────────────────────────────────────────────
+
+HASS_ENTITY = "switch.simba_office_switch_1"
+HASS_DEFAULT_URL = "http://192.168.3.38:8123"
+
+
+def _load_hass_env():
+    """Return (url, token) from env or ~/.hermes/.env."""
+    url = os.environ.get("HASS_URL", HASS_DEFAULT_URL)
+    token = os.environ.get("HASS_TOKEN")
+    try:
+        with open(os.path.expanduser("~/.hermes/.env")) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                if key == "HASS_URL":
+                    url = val.strip()
+                elif key == "HASS_TOKEN":
+                    token = val.strip()
+    except OSError:
+        pass
+    return url, token
+
+
+def _hass_state(base, headers):
+    """Return the current state of the Simba office light entity."""
+    result = subprocess.run(
+        ["curl", "-s", "-m", "8",
+         f"{base}/api/states/{HASS_ENTITY}"] + headers,
+        capture_output=True, text=True, timeout=15)
+    return json.loads(result.stdout).get("state")
+
+
+def _hass_wait_state(base, headers, target, timeout=8):
+    """Poll until the entity reaches `target` (Tuya switches lag a few sec)."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if _hass_state(base, headers) == target:
+            return True
+        time.sleep(0.5)
+    return False
+
+
 class ActionRouter:
     """Resolves and executes tool actions from LLM JSON output."""
 
@@ -154,7 +205,8 @@ class ActionRouter:
         elif action == "get_weather":
             return self._get_weather(value)
 
-        elif action in ("simba_office_light_on", "simba_office_light_off"):
+        elif action in ("simba_office_light_on", "simba_office_light_off",
+                        "lights_on", "lights_off"):
             return self._simba_light(action)
 
         return None
@@ -254,36 +306,34 @@ class ActionRouter:
 
     @staticmethod
     def _simba_light(action):
-        """SSH into xero-ai and run Hermes to toggle Simba Office light."""
+        """Turn the Simba Office light on/off via Home Assistant (idempotent)."""
         target = "on" if action.endswith("_on") else "off"
-        command_es = (
-            "enciende la luz de simba office" if target == "on"
-            else "apaga la luz de simba office"
-        )
-        logger.info(f"Simba Office Light → {target.upper()} (SSH to xero-ai)")
+        url, token = _load_hass_env()
+        if not token:
+            logger.error("HASS_TOKEN not set (~/.hermes/.env)")
+            return "SIMBA_LIGHT_ERROR::HASS_TOKEN not set (~/.hermes/.env)"
+        base = url.rstrip("/")
+        headers = ["-H", f"Authorization: Bearer {token}",
+                   "-H", "Content-Type: application/json"]
         try:
-            result = subprocess.run(
-                ["ssh", "-o", "ConnectTimeout=5",
-                 "-i", os.path.expanduser("~/.ssh/id_ed25519_fleet"),
-                 "mch@xero-ai.local",
-                 "~/.local/bin/hermes chat -q " + shlex.quote(command_es)],
-                capture_output=True, text=True, timeout=90
-            )
-            output = result.stdout.strip()
-            if result.returncode != 0:
-                logger.error(
-                    f"Simba SSH failed (rc={result.returncode}): "
-                    f"{result.stderr[:200]}")
-                return (f"SIMBA_LIGHT_ERROR::Could not reach xero-ai "
-                        f"(exit code {result.returncode})")
-            logger.info(f"Simba SSH OK, output: {output[-300:]}")
-            return f"SIMBA_LIGHT::{target.upper()} — command sent to xero-ai"
-        except subprocess.TimeoutExpired:
-            logger.error("Simba SSH timed out")
-            return "SIMBA_LIGHT_ERROR::SSH to xero-ai timed out"
-        except FileNotFoundError:
-            logger.error("Simba: ssh command not found")
-            return "SIMBA_LIGHT_ERROR::SSH not available on this system"
+            state = _hass_state(base, headers)
         except Exception as e:
-            logger.error(f"Simba unexpected error: {e}")
+            logger.error(f"Simba HA state read failed: {e}")
+            return f"SIMBA_LIGHT_ERROR::could not read state: {str(e)[:100]}"
+        if state == target:
+            return f"SIMBA_LIGHT::{target.upper()} — already {target}, no change"
+        logger.info(f"Simba Office Light → {target.upper()} (Home Assistant)")
+        try:
+            subprocess.run(
+                ["curl", "-s", "-m", "8", "-X", "POST",
+                 f"{base}/api/services/switch/turn_{target}",
+                 "-d", json.dumps({"entity_id": HASS_ENTITY})] + headers,
+                capture_output=True, text=True, timeout=15, check=True)
+        except Exception as e:
+            logger.error(f"Simba HA call failed: {e}")
             return f"SIMBA_LIGHT_ERROR::{str(e)[:100]}"
+        if _hass_wait_state(base, headers, target):
+            return (f"SIMBA_LIGHT::{target.upper()} — "
+                    f"Simba office light is {target}")
+        return (f"SIMBA_LIGHT_ERROR::state did not reach {target} "
+                f"within timeout")
