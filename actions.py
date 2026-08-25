@@ -15,6 +15,7 @@ VALID_TOOLS = {
     "show_face", "get_weather", "who_person",
     "simba_office_light_on", "simba_office_light_off",
     "lights_on", "lights_off", "lights_toggle",
+    "backlight_on", "backlight_off", "backlight_toggle",
 }
 
 ALIASES = {
@@ -40,6 +41,11 @@ ALIASES = {
     "luces_apaga": "lights_off", "luces_enciende": "lights_on",
     "lights": "lights_toggle", "luces": "lights_toggle",
     "toggle_lights": "lights_toggle", "cambia_luz": "lights_toggle",
+    # BMO display backlight
+    "backlight": "backlight_toggle", "screen": "backlight_toggle",
+    "pantalla": "backlight_toggle", "brillo": "backlight_toggle",
+    "screen_on": "backlight_on", "screen_off": "backlight_off",
+    "pantalla_on": "backlight_on", "pantalla_off": "backlight_off",
 }
 
 FACE_MAP = {
@@ -165,6 +171,30 @@ def _hass_wait_state(base, headers, target, timeout=8):
     return False
 
 
+# ── BMO display backlight (local DSI panel) ─────────────────────────────
+
+BACKLIGHT_PATH = "/sys/class/backlight/11-0045/brightness"
+BACKLIGHT_MAX = 255
+
+
+def _backlight_read():
+    """Return current backlight brightness (0-255) or None on failure."""
+    try:
+        with open(BACKLIGHT_PATH) as f:
+            return int(f.read().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def _backlight_set(value):
+    """Write brightness via sudo tee, return True if it took effect."""
+    subprocess.run(
+        ["sudo", "tee", BACKLIGHT_PATH],
+        input=f"{value}\n", capture_output=True, text=True, timeout=5,
+        check=True)
+    return _backlight_read() == value
+
+
 class ActionRouter:
     """Resolves and executes tool actions from LLM JSON output."""
 
@@ -213,6 +243,9 @@ class ActionRouter:
 
         elif action == "lights_toggle":
             return self._lights_toggle()
+
+        elif action in ("backlight_on", "backlight_off", "backlight_toggle"):
+            return self._backlight(action)
 
         return None
 
@@ -369,3 +402,26 @@ class ActionRouter:
             return f"SIMBA_LIGHT_ERROR::could not read state: {str(e)[:100]}"
         target = "off" if state == "on" else "on"
         return ActionRouter._apply_light(target)
+
+    @staticmethod
+    def _backlight(action):
+        """Turn the BMO display backlight on/off (idempotent) or toggle it."""
+        current = _backlight_read()
+        if current is None:
+            return "BACKLIGHT_ERROR::could not read backlight"
+        if action == "backlight_toggle":
+            target = 0 if current > 0 else BACKLIGHT_MAX
+        else:
+            target = BACKLIGHT_MAX if action.endswith("_on") else 0
+        state = "on" if target == BACKLIGHT_MAX else "off"
+        if current == target:
+            return f"BACKLIGHT::BMO backlight is already {state}."
+        logger.info(f"BMO backlight → {state.upper()}")
+        try:
+            _backlight_set(target)
+        except Exception as e:
+            logger.error(f"Backlight write failed: {e}")
+            return f"BACKLIGHT_ERROR::{str(e)[:100]}"
+        if _backlight_read() == target:
+            return f"BACKLIGHT::BMO backlight is now {state}."
+        return "BACKLIGHT_ERROR::backlight did not change"

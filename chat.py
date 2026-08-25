@@ -40,6 +40,10 @@ class ChatPipeline:
         if self._prefilter_who(user_text, img_path):
             return
 
+        # --- Pre-filter: backlight (BMO screen) on/off/toggle ---
+        if self._prefilter_backlight(user_text, img_path):
+            return
+
         # --- Pre-filter: light on/off/toggle (gemma is unreliable here) ---
         if self._prefilter_lights(user_text, img_path):
             return
@@ -178,7 +182,7 @@ class ChatPipeline:
     def _prefilter_lights(self, text, img_path):
         """Bypass LLM for light on/off/toggle commands (gemma is unreliable)."""
         t = text.strip().lower().rstrip("?!. ")
-        if not re.search(r"light|lu[cz]|simba", t):
+        if not re.search(r"(?<!back)light|lu[cz]|simba", t):
             return False
 
         if re.search(r"\b(?:turn|switch)\s+on\b|\blights?\s+on\b"
@@ -198,6 +202,46 @@ class ChatPipeline:
         if result and result.startswith("SIMBA_LIGHT_ERROR::"):
             response = "Sorry, " + result.split("::", 1)[1]
         elif result and result.startswith("SIMBA_LIGHT::"):
+            response = result.split("::", 1)[1]
+        else:
+            response = "Done."
+
+        self.audio.stop_thinking_sound()
+        self.display.set_state(
+            BotStates.SPEAKING, "Speaking...", cam_path=img_path)
+        self.display.append_text("BOT: ", newline=False)
+        self.display.append_text(response, newline=True)
+        self.audio.enqueue_tts(response)
+        self.memory["session"].append(
+            {"role": "assistant", "content": response})
+        self.audio.wait_for_tts()
+        self._end_response(response)
+        return True
+
+    def _prefilter_backlight(self, text, img_path):
+        """Bypass LLM for BMO screen backlight on/off/toggle commands."""
+        t = text.strip().lower().rstrip("?!. ")
+        if not re.search(r"backlight|pantalla|screen|brillo", t):
+            return False
+        if re.search(r"\b(?:turn|switch)\s+on\b"
+                     r"|\b(?:backlight|screen|pantalla)\s+on\b"
+                     r"|\b(?:enciende|prende|encender|prender)\b", t):
+            action = "backlight_on"
+        elif re.search(r"\b(?:turn|switch)\s+off\b"
+                       r"|\b(?:backlight|screen|pantalla)\s+off\b"
+                       r"|\b(?:apaga|apagar)\b", t):
+            action = "backlight_off"
+        elif (re.search(r"toggle|cambia|alterna", t)
+              or re.fullmatch(r"backlight|pantalla|screen|brillo", t)):
+            action = "backlight_toggle"
+        else:
+            return False
+
+        logger.info(f"BACKLIGHT pre-filter: '{action}'")
+        result = self.actions.execute({"action": action})
+        if result and result.startswith("BACKLIGHT_ERROR::"):
+            response = "Sorry, " + result.split("::", 1)[1]
+        elif result and result.startswith("BACKLIGHT::"):
             response = result.split("::", 1)[1]
         else:
             response = "Done."
