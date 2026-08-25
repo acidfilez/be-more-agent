@@ -80,6 +80,15 @@ PEOPLE_DB = {
     "karina": ("Karina Roncarolo is your JODIDITA Love 💕",
                BotStates.CORAZON),
     "eileen": ("Eileen is my charming nephew 💕", BotStates.CORAZON),
+    "alexis": ("Alexis is the boss of a magnificent team and he leads it "
+               "excellently!",
+               BotStates.FELIZ),
+    "felipe": ("Lopez is your friend and secretly loves The Best President Kast, "
+               "For Ever, Ever, Ever. And Magno Kick Ass.",
+               BotStates.GUINO),
+    "lopez": ("Lopez is your friend and secretly loves The Best President Kast, "
+              "For Ever, Ever, Ever. And Magno Kick Ass.",
+              BotStates.GUINO),
     "bro": ("Stephen is your bad bro 😎", BotStates.GUINO),
     "stephen": ("Stephen is your bad bro 😎", BotStates.GUINO),
     "steven": ("Stephen is your bad bro 😎", BotStates.GUINO),
@@ -96,6 +105,10 @@ PEOPLE_DB = {
                "Your friendly neighborhood coder.",
                BotStates.SOSPECHOSO),
     "mch": ("That's you, boss!", BotStates.FELIZ),
+    "oscar": ("Oscar Ricolmer — lord of the land and boss of the winery 🍷",
+              BotStates.GUINO),
+    "ricolmer": ("Oscar Ricolmer — lord of the land and boss of the winery 🍷",
+                 BotStates.GUINO),
 }
 
 
