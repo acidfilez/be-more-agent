@@ -674,6 +674,8 @@ class BotGUI:
                 "magnum":   ("Magno Cardona — also known as acidfilez. Your friendly neighborhood coder.", BotStates.SOSPECHOSO),
                 "magnus":   ("Magno Cardona — also known as acidfilez. Your friendly neighborhood coder.", BotStates.SOSPECHOSO),
                 "mch":      ("That's you, boss!", BotStates.FELIZ),
+                "oscar":    ("Oscar Ricolmer — lord of the land and boss of the winery 🍷", BotStates.GUINO),
+                "ricolmer": ("Oscar Ricolmer — lord of the land and boss of the winery 🍷", BotStates.GUINO),
             }
             for key, (response, face) in people.items():
                 if key in name:
