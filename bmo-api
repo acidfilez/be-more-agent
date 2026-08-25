@@ -40,6 +40,7 @@ import subprocess
 import time
 import platform
 import inspect
+import urllib.request
 from urllib.parse import parse_qs
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
@@ -47,9 +48,50 @@ from datetime import datetime
 
 HOST = "0.0.0.0"
 PORT = 8080
-AGENT_DIR = str(Path.home() / "Projects" / "be-more-agent")
+AGENT_DIR = str(Path.home() / "Projects" / "be-more-agent-modular")
 AGENT_PATTERN = "be-more-agent.*agent.py"
 START_SCRIPT = os.path.join(AGENT_DIR, "start.sh")
+
+# ── Home Assistant (xero-ai) — Simba office light ──────────────────────
+HASS_ENTITY = "switch.simba_office_switch_1"
+HASS_DEFAULT_URL = "http://192.168.3.38:8123"
+HASS_ENV = str(Path.home() / ".hermes" / ".env")
+
+
+def _load_hass_env():
+    """Return (url, token) from env or ~/.hermes/.env."""
+    url = os.environ.get("HASS_URL", HASS_DEFAULT_URL)
+    token = os.environ.get("HASS_TOKEN")
+    try:
+        for line in Path(HASS_ENV).read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, val = line.split("=", 1)
+            if key == "HASS_URL":
+                url = val.strip()
+            elif key == "HASS_TOKEN":
+                token = val.strip()
+    except OSError:
+        pass
+    return url, token
+
+
+def _hass_request(method, path, body=None):
+    """Call Home Assistant REST API. Returns (data, error)."""
+    url, token = _load_hass_env()
+    if not token:
+        return None, "HASS_TOKEN not set (~/.hermes/.env)"
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(
+        url.rstrip("/") + path, data=data, method=method,
+        headers={"Authorization": f"Bearer {token}",
+                 "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read().decode()), None
+    except Exception as e:
+        return None, str(e)
 
 # ── helpers ──────────────────────────────────────────────────────────────
 
@@ -203,7 +245,13 @@ ENDPOINTS = [
     ("GET",  "/bmo/system/backlight","backlight state (brightness, max, on/off)"),
     ("POST", "/bmo/system/backlight/on",  "set backlight to max brightness"),
     ("POST", "/bmo/system/backlight/off", "set backlight to 0 (screen off)"),
+    ("POST", "/bmo/system/backlight/toggle", "toggle backlight on/off"),
     ("POST", "/bmo/system/backlight/value", "set brightness 0-255 (body or ?value=)"),
+    ("GET",  "/bmo/lights",              "Simba office light state"),
+    ("GET",  "/bmo/lights/status",       "Simba office light state (alias)"),
+    ("POST", "/bmo/lights/on",           "turn Simba office light on (idempotent)"),
+    ("POST", "/bmo/lights/off",          "turn Simba office light off (idempotent)"),
+    ("POST", "/bmo/lights/toggle",       "toggle Simba office light"),
 ]
 
 
@@ -509,6 +557,76 @@ def cmd_backlight_value(req):
         return json_err(f"failed to set backlight: {err}", 500)
     record_command("backlight_value", {"brightness": value})
     return json_ok({"on": value > 0, "brightness": value})
+
+
+@route("POST", "/bmo/system/backlight/toggle")
+def cmd_backlight_toggle():
+    brightness = backlight_read("brightness")
+    max_brightness = backlight_read("max_brightness")
+    if brightness is None:
+        return json_err("backlight not available", 500)
+    target = 0 if brightness > 0 else max_brightness
+    rc, err = backlight_write(target)
+    if rc != 0:
+        return json_err(f"failed to toggle backlight: {err}", 500)
+    record_command("backlight_toggle", {"brightness": target})
+    return json_ok({"on": target > 0, "brightness": target})
+
+
+# ── Simba office light (Home Assistant) ─────────────────────────────────
+
+
+def _lights_set(target):
+    """Turn the Simba office light to `target` ('on'/'off'), idempotent."""
+    data, err = _hass_request("GET", f"/api/states/{HASS_ENTITY}")
+    if err:
+        return json_err(f"could not read state: {err}", 502)
+    if data.get("state") == target:
+        return json_ok({"status": "already", "state": target})
+    _, err = _hass_request(
+        "POST", f"/api/services/switch/turn_{target}",
+        {"entity_id": HASS_ENTITY})
+    if err:
+        return json_err(f"HA call failed: {err}", 502)
+    for _ in range(16):  # Tuya switch lags a few sec; poll up to 8s
+        time.sleep(0.5)
+        data, _ = _hass_request("GET", f"/api/states/{HASS_ENTITY}")
+        if data and data.get("state") == target:
+            return json_ok({"status": "changed", "state": target})
+    return json_ok({"status": "pending", "state": target})
+
+
+@route("GET", ["/bmo/lights", "/bmo/lights/status"])
+def cmd_lights_status():
+    data, err = _hass_request("GET", f"/api/states/{HASS_ENTITY}")
+    if err:
+        return json_err(err, 502)
+    return json_ok({"entity": HASS_ENTITY, "state": data.get("state")})
+
+
+@route("POST", "/bmo/lights/on")
+def cmd_lights_on():
+    result = _lights_set("on")
+    record_command("lights_on", result)
+    return result
+
+
+@route("POST", "/bmo/lights/off")
+def cmd_lights_off():
+    result = _lights_set("off")
+    record_command("lights_off", result)
+    return result
+
+
+@route("POST", "/bmo/lights/toggle")
+def cmd_lights_toggle():
+    data, err = _hass_request("GET", f"/api/states/{HASS_ENTITY}")
+    if err:
+        return json_err(err, 502)
+    target = "off" if data.get("state") == "on" else "on"
+    result = _lights_set(target)
+    record_command("lights_toggle", result)
+    return result
 
 
 # ── HTTP handler ─────────────────────────────────────────────────────────
