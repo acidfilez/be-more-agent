@@ -51,6 +51,9 @@ You: {"action": "lights_off"}
 User: Lights on / Turn on the lights
 You: {"action": "lights_on"}
 
+User: Lights / Toggle the lights
+You: {"action": "lights_toggle"}
+
 ### END EXAMPLES ###
 """
 

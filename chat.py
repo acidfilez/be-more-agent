@@ -40,6 +40,10 @@ class ChatPipeline:
         if self._prefilter_who(user_text, img_path):
             return
 
+        # --- Pre-filter: light on/off/toggle (gemma is unreliable here) ---
+        if self._prefilter_lights(user_text, img_path):
+            return
+
         # --- Memory reset ---
         if "forget everything" in user_text.lower() or "reset memory" in user_text.lower():
             self.memory["session"] = []
@@ -75,9 +79,18 @@ class ChatPipeline:
                 model=model, messages=messages, stream=True,
                 options=OLLAMA_OPTIONS)
 
+            last_pump = 0.0
             for chunk in stream:
                 if self.audio.interrupted.is_set():
                     break
+
+                # Pump the GUI event loop so the speaking/mouth animation
+                # cycles while we stream tokens + TTS speaks (main thread
+                # is otherwise blocked here).
+                now = time.monotonic()
+                if now - last_pump >= 0.05:
+                    self.display.master.update()
+                    last_pump = now
 
                 content = chunk['message']['content']
                 full_response += content
@@ -149,6 +162,45 @@ class ChatPipeline:
             response = result.split("::", 1)[1]
         else:
             response = f"I don't know who {name} is."
+
+        self.audio.stop_thinking_sound()
+        self.display.set_state(
+            BotStates.SPEAKING, "Speaking...", cam_path=img_path)
+        self.display.append_text("BOT: ", newline=False)
+        self.display.append_text(response, newline=True)
+        self.audio.enqueue_tts(response)
+        self.memory["session"].append(
+            {"role": "assistant", "content": response})
+        self.audio.wait_for_tts()
+        self._end_response(response)
+        return True
+
+    def _prefilter_lights(self, text, img_path):
+        """Bypass LLM for light on/off/toggle commands (gemma is unreliable)."""
+        t = text.strip().lower().rstrip("?!. ")
+        if not re.search(r"light|lu[cz]|simba", t):
+            return False
+
+        if re.search(r"\b(?:turn|switch)\s+on\b|\blights?\s+on\b"
+                     r"|\b(?:enciende|prende|prendé|encender|prender)\b", t):
+            action = "lights_on"
+        elif re.search(r"\b(?:turn|switch)\s+off\b|\blights?\s+off\b"
+                       r"|\b(?:apaga|apagar)\b", t):
+            action = "lights_off"
+        elif (re.search(r"\b(?:cambia|toggle|alterna)\b", t)
+              or re.fullmatch(r"lights?|lu[cz]e?s?", t)):
+            action = "lights_toggle"
+        else:
+            return False
+
+        logger.info(f"LIGHTS pre-filter: '{action}'")
+        result = self.actions.execute({"action": action})
+        if result and result.startswith("SIMBA_LIGHT_ERROR::"):
+            response = "Sorry, " + result.split("::", 1)[1]
+        elif result and result.startswith("SIMBA_LIGHT::"):
+            response = result.split("::", 1)[1]
+        else:
+            response = "Done."
 
         self.audio.stop_thinking_sound()
         self.display.set_state(

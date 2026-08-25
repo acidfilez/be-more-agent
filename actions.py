@@ -14,7 +14,7 @@ VALID_TOOLS = {
     "get_time", "search_web", "capture_image", "show_camera",
     "show_face", "get_weather", "who_person",
     "simba_office_light_on", "simba_office_light_off",
-    "lights_on", "lights_off",
+    "lights_on", "lights_off", "lights_toggle",
 }
 
 ALIASES = {
@@ -38,6 +38,8 @@ ALIASES = {
     "luces_on": "lights_on", "luces_off": "lights_off",
     "apagar_luces": "lights_off", "encender_luces": "lights_on",
     "luces_apaga": "lights_off", "luces_enciende": "lights_on",
+    "lights": "lights_toggle", "luces": "lights_toggle",
+    "toggle_lights": "lights_toggle", "cambia_luz": "lights_toggle",
 }
 
 FACE_MAP = {
@@ -209,6 +211,9 @@ class ActionRouter:
                         "lights_on", "lights_off"):
             return self._simba_light(action)
 
+        elif action == "lights_toggle":
+            return self._lights_toggle()
+
         return None
 
     # ------------------------------------------------------------------
@@ -305,23 +310,31 @@ class ActionRouter:
             return f"WEATHER_UNAVAILABLE::{city}"
 
     @staticmethod
-    def _simba_light(action):
-        """Turn the Simba Office light on/off via Home Assistant (idempotent)."""
-        target = "on" if action.endswith("_on") else "off"
+    def _hass_context():
+        """Return (base_url, headers) or None if the token is missing."""
         url, token = _load_hass_env()
         if not token:
-            logger.error("HASS_TOKEN not set (~/.hermes/.env)")
-            return "SIMBA_LIGHT_ERROR::HASS_TOKEN not set (~/.hermes/.env)"
-        base = url.rstrip("/")
+            return None
+        base = (url or HASS_DEFAULT_URL).rstrip("/")
         headers = ["-H", f"Authorization: Bearer {token}",
                    "-H", "Content-Type: application/json"]
+        return base, headers
+
+    @staticmethod
+    def _apply_light(target):
+        """Turn the Simba Office light to `target` ('on'/'off'), idempotent."""
+        ctx = ActionRouter._hass_context()
+        if ctx is None:
+            logger.error("HASS_TOKEN not set (~/.hermes/.env)")
+            return "SIMBA_LIGHT_ERROR::HASS_TOKEN not set (~/.hermes/.env)"
+        base, headers = ctx
         try:
             state = _hass_state(base, headers)
         except Exception as e:
             logger.error(f"Simba HA state read failed: {e}")
             return f"SIMBA_LIGHT_ERROR::could not read state: {str(e)[:100]}"
         if state == target:
-            return f"SIMBA_LIGHT::{target.upper()} — already {target}, no change"
+            return f"SIMBA_LIGHT::The Simba office light is already {target}."
         logger.info(f"Simba Office Light → {target.upper()} (Home Assistant)")
         try:
             subprocess.run(
@@ -333,7 +346,26 @@ class ActionRouter:
             logger.error(f"Simba HA call failed: {e}")
             return f"SIMBA_LIGHT_ERROR::{str(e)[:100]}"
         if _hass_wait_state(base, headers, target):
-            return (f"SIMBA_LIGHT::{target.upper()} — "
-                    f"Simba office light is {target}")
+            return f"SIMBA_LIGHT::The Simba office light is now {target}."
         return (f"SIMBA_LIGHT_ERROR::state did not reach {target} "
                 f"within timeout")
+
+    @staticmethod
+    def _simba_light(action):
+        """Map an *_on / *_off action to the HA light target."""
+        return ActionRouter._apply_light(
+            "on" if action.endswith("_on") else "off")
+
+    @staticmethod
+    def _lights_toggle():
+        """Toggle the light: off if on, on if off."""
+        ctx = ActionRouter._hass_context()
+        if ctx is None:
+            return "SIMBA_LIGHT_ERROR::HASS_TOKEN not set (~/.hermes/.env)"
+        base, headers = ctx
+        try:
+            state = _hass_state(base, headers)
+        except Exception as e:
+            return f"SIMBA_LIGHT_ERROR::could not read state: {str(e)[:100]}"
+        target = "off" if state == "on" else "on"
+        return ActionRouter._apply_light(target)
